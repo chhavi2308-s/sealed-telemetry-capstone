@@ -1,0 +1,732 @@
+Sealed-Telemetry
+End-to-End Implementation, Research Validation & Review-2 Handover Plan
+Version 1.0  |  26 October 2026  |  Status: Proposed, not yet deployed
+Working research title: Compromise-Resilient Evidence Reconciliation for OAuth Abuse in Serverless Applications
+Source note: Based on the prior conversation’s Review-1 audit and proposed IBER architecture. The original presentation was not available for a fresh full-text cross-check in this generation; verify slide-specific wording and existing implementation status before marking any task complete.
+1. Executive decision and boundaries
+Objective: demonstrate that application-log suppression during simulated OAuth token replay does not necessarily eliminate independently observed evidence, and test whether invocation-bound, completeness-aware reconciliation improves detection compared with simpler log-based baselines.
+Do not claim that an AWS Lambda extension is independent of a compromised Lambda process, that CloudTrail records arbitrary outbound SaaS requests, that a hash proves event truth, or that OAuth token revocation always takes effect immediately.
+Definition of success
+Review 2: deployed AWS Lambda application, controlled OAuth test API, legitimate request, disposable-token replay, suppressed application log, independent API-side audit event, correlation finding, timestamped demonstration and evidence.
+Final capstone: IBER state machine, completeness windows, immutable evidence archive, safe response workflow, repeatable attack/fault scenarios, quantitative baselines, ablation study, cost/latency measurements, and documented limitations.
+Non-goals: scraping live third-party credentials, production SaaS exploitation, universal attribution of all outbound traffic, guarantee of instantaneous detection, or perfect reconstruction from nonexistent evidence.
+2. Threat model and trust boundaries
+Boundary
+Attacker capability
+Defensive assumption
+Application Lambda
+Execute compromised test code; access disposable credential; suppress application emitter
+Cannot alter independent collector IAM or evidence archive
+External API
+Replay lab token to controlled endpoint
+API audit logger is independently operated
+Telemetry extension
+May crash or be affected by shared execution environment
+Treat as corroborative, never sole trusted witness
+Security account / collector
+Outside initial attacker control
+Least-privilege IAM, no workload delete rights
+OAuth provider
+May delay or not support revocation
+Test actual behavior and report limitations
+
+Attack preconditions: use only lab accounts, synthetic records, disposable tokens, and explicit team authorization. Avoid logging token bytes. Distinguish simulated token access from actual external token compromise.
+3. Logical architecture and data flows
+Ingress: client -> API Gateway -> Lambda integration -> mock SaaS resource API. OAuth: mock authorization server issues short-lived scoped test token, stored in Secrets Manager for lab integration. Evidence: Lambda intent emitter, API Gateway access logs, supported CloudTrail events, Lambda platform telemetry, mock SaaS audit emitter. Collector: independently permissioned API Gateway/Lambda -> SQS -> normalizer -> DynamoDB correlation state and S3 Object Lock archive. Detection: EventBridge or SQS-triggered reconciler -> findings -> Step Functions response -> responder Lambda -> mock provider revoke/disable integration. Investigation: archive reader -> ordered timeline with confidence and gaps -> report.
+Trust-sensitive architecture decisions
+External SaaS audit record must originate at the test API service, not be copied from the compromised Lambda log.
+For the first milestone, use a mock provider and mock SaaS API on separately permissioned infrastructure; real sandbox provider is optional later.
+If intent is emitted solely by compromised application, it may be missing or fabricated. Detect against independently issued authorizations and external actions; label unverifiable cases inconclusive.
+No guarantee of exact cross-provider request matching: use provider request ID where supported, else bounded identity/operation/resource/time matching with lower confidence.
+Hash-chain ordering must be defined per collector partition or single writer; global ordering across parallel writers is not assumed.
+4. Concrete AWS bill of materials
+Service
+Purpose
+Deployment notes
+AWS Lambda
+app, collector, normalizer, reconciler, responder
+Separate roles and memory/timeouts; supported Python runtime
+API Gateway HTTP API
+ingress and collector endpoint
+Authentication, throttling, access logs
+Secrets Manager
+disposable lab OAuth secret
+Scoped IAM; no plaintext logs
+CloudWatch Logs
+operational logs and platform visibility
+Short retention for debug, separate from protected archive
+CloudTrail
+supported AWS API audit
+Configure relevant management/data events; not outbound SaaS logs
+SQS + DLQ
+durable ingestion/retries
+Idempotency; retention; alarm on DLQ
+DynamoDB
+event index, state, dedupe
+TTL only for transient state, not forensic archive
+S3 Object Lock + versioning
+evidence preservation
+Create bucket with Object Lock enabled; retention policy and IAM restrictions
+KMS
+encryption/keyed operations
+Restrict keys; avoid claiming signing implies event truth
+EventBridge
+findings and orchestration
+Event replay/duplicate-safe consumers
+Step Functions
+containment and recovery
+Human approval gate for high-impact actions
+CloudFormation via AWS SAM
+repeatable infrastructure
+Separate dev/test stacks; tagged cost tracking
+
+5. Repository structure and coding standards
+Recommended monorepo layout:
+• README.md — project scope, quick start, limitations
+• docs/architecture.md; docs/threat-model.md; docs/adr/ — decisions
+• docs/review2-demo.md; docs/runbook.md; docs/handover.md
+• infra/template.yaml; infra/parameters.example.json — AWS SAM
+• services/app/; services/mock-auth/; services/mock-saas/
+• services/collector/; services/reconciler/; services/responder/
+• packages/event_schema/; packages/correlation/
+• scenarios/normal/; scenarios/replay/; scenarios/log_suppression/; scenarios/faults/
+• tests/unit/; tests/integration/; tests/e2e/; tests/security/
+• experiments/configs/; experiments/results/; experiments/notebooks/
+• scripts/deploy.sh; scripts/seed_lab.py; scripts/run_demo.py; scripts/cleanup.sh
+• .github/workflows/ci.yml; .env.example; .gitignore
+Branch model: main protected; feature/<component>-<issue>; PR review mandatory; all infrastructure and schema changes include tests and documentation. Never commit tokens, AWS credentials, actual event secrets, or .env.
+6. Canonical event contracts
+Evidence event v1 fields
+event_id (UUID), schema_version, run_id, scenario_id, invocation_id (nullable), action_id (nullable), source_type, source_trust_tier, event_type, operation, resource_pseudonym, credential_fingerprint (HMAC), event_time_utc, collector_received_at_utc, provider_request_id (nullable), correlation_key (nullable), event_payload_hash, collector_receipt_id, source_health, integrity_version, trace_context (nullable).
+Use UTC ISO-8601 timestamps. Keep event_time and received_at separate. Define source-specific required fields, schema validation, dead-letter handling, and duplicate behavior. Store raw original event and canonicalized normalized event separately; version normalization rules.
+Detection finding v1
+finding_id, run_id, affected_identity, evidence_event_ids[], classification (CONSISTENT, PENDING, SUSPICIOUS, CORROBORATED_SUSPECTED_ABUSE, INCONCLUSIVE), severity, rationale_codes[], missing_sources[], confidence_basis, decision_at, attack_ground_truth_reference (evaluation only), response_requested, response_verified_at, residual_uncertainty.
+State transitions
+PENDING -> CONSISTENT when required corroboration arrives; PENDING -> SUSPICIOUS when evidence contradicts authorization; PENDING -> INCONCLUSIVE if source unhealthy or coverage inadequate; SUSPICIOUS -> CORROBORATED_SUSPECTED_ABUSE when independently corroborated; late arrivals cause an auditable re-evaluation, not silent overwrite.
+7. Review-2 milestone: detailed build sequence
+Step
+Implementation task
+Proof / exit criterion
+R2-01
+Create dedicated AWS lab account or isolated stack, budgets and IAM roles
+Account/region recorded; least privilege reviewed; budget alert enabled
+R2-02
+Deploy mock OAuth issuer and mock SaaS audit API
+Test token issued, expiry enforced, scoped API succeeds
+R2-03
+Deploy app Lambda behind API Gateway
+200 response and AWS request ID in logs
+R2-04
+Implement legitimate action with action_id and expected operation
+Action-intent event correlated to SaaS API event
+R2-05
+Deploy independent audit emitter and collector
+SaaS API event persists when app logger disabled
+R2-06
+Deploy SQS + normalizer + DynamoDB + S3 archive
+Schema valid, retry/idempotency tests pass
+R2-07
+Implement basic rules: unmatched external action, log suppression, source unavailable
+Findings classified with rationale and event IDs
+R2-08
+Create lab-only simulated token exposure and replay scenario
+Replay succeeds only against synthetic sandbox resource
+R2-09
+Run benign logger failure and collector delay scenarios
+No unsupported claim of confirmed attack
+R2-10
+Instrument event times and calculate latency
+CSV of attack, ingest, decision times
+R2-11
+Record repeatable live demo and screenshots
+Clean start -> attack -> finding -> archive -> timeline
+R2-12
+Freeze demo tag, runbook and cleanup test
+Teammate can reproduce from README
+
+Review-2 demo script (target 8–10 minutes)
+• 00:00–01:00 Explain problem, attack scope, trust boundaries and AWS deployed topology.
+• 01:00–02:30 Show Lambda/API Gateway, mock OAuth, normal request and correlated audit events.
+• 02:30–04:00 Demonstrate controlled token exposure (fingerprint only), disable application event emitter, replay disposable token to mock API.
+• 04:00–05:30 Show missing application log alongside independent API audit event; explain what source recorded the action.
+• 05:30–07:00 Show detector finding, event IDs, decision rationale and measured latency; explicitly state if detection was after invocation.
+• 07:00–08:00 Demonstrate benign missing-log or collector delay classified as inconclusive rather than automatically malicious.
+• 08:00–09:00 Show protected evidence record and next milestones: completeness windows, revocation, baselines.
+Review-2 screenshot / evidence checklist
+AWS architecture resource list with region, role separation and no secrets visible
+Successful Lambda invocation and API Gateway response
+Mock SaaS legitimate audit record and replay audit record
+Application log before and after deliberate suppression
+Collector event with event_time and received_at
+Detection finding with matching evidence IDs and confidence
+S3 archive object and retention configuration (non-sensitive)
+Latency CSV/plot and demo recording
+SAM deployment and cleanup commands, commit hash, test summary
+8. Post-review implementation phases
+Phase
+Scope
+Exit gate
+P1 Evidence hardening
+Add S3 Object Lock retention, KMS, audit of collector, hash verification, IAM negative tests.
+Cannot delete evidence with workload role; altered copy fails integrity check.
+P2 IBER algorithm
+Implement event-time windows, source health, pending/inconclusive states, late-event revisions, confidence reasoning.
+Unit/integration tests cover ordering, duplicates, lateness and outage.
+P3 Containment
+Step Functions response, policy gate, mock provider revocation, integration disable, response verification.
+Replay rejected after verified containment; failures logged.
+P4 Forensics
+Reconstruct partial-order timeline with provenance, gaps, hashes and exportable incident report.
+Known ground-truth events reconstructed with explicit uncertainty.
+P5 Evaluation
+Controlled trials, 4 baselines, ablations, attack/fault mixes, overhead/cost.
+Held-out metrics with confidence intervals and raw experiment manifests.
+P6 Final delivery
+Architecture docs, diagrams, poster, final report, demo video, reproducibility archive.
+Fresh machine/account deployment documented and independently rehearsed.
+
+9. Algorithm specification and test cases
+Matching precedence: (1) explicit provider_request_id and issued authorization ID, (2) invocation_id/action_id propagated through a trusted gateway where available, (3) bounded identity + operation + resource + time candidate set. Ambiguous matches remain ambiguous. Avoid treating correlation based only on time as definitive proof.
+Deadline selection: estimate per-source arrival distributions on benign calibration runs; define D_source = chosen percentile + safety margin; record exact parameters and calibration data. Late events trigger revision and are measured as such. Do not hardcode a 5-second guarantee.
+Test ID
+Stimulus
+Expected behavior
+T01
+Normal authorized API read
+CONSISTENT
+T02
+Replay from independent test client with suppressed app log
+SUSPICIOUS then corroborated when evidence supports
+T03
+Benign app logger disabled, no replay
+INCONCLUSIVE or benign fault, not confirmed abuse
+T04
+Provider audit delayed
+PENDING then correct late revision
+T05
+Duplicate SQS event
+One logical evidence record
+T06
+Out-of-order audit records
+Stable result after window closes
+T07
+Collector down
+Health alert; no false certainty
+T08
+Expired/invalid token replay
+Record denied action, do not call successful exfiltration
+T09
+Compromised workload attempts archive delete
+Access denied; preserve evidence
+T10
+Mock provider revocation fails
+Response status failed/unverified
+T11
+Authorized bulk read
+No automatic malicious verdict solely for volume
+T12
+Two concurrent invocations with same identity
+No cross-invocation false association
+
+10. Research evaluation protocol
+Research questions: RQ1 attack detection under suppressed logs; RQ2 false-positive robustness to benign telemetry faults; RQ3 latency/overhead/cost; RQ4 integrity and reconstruction accuracy. Ground truth must be generated by an isolated scenario runner, never inferred from detector output.
+Baselines: B0 application logs only; B1 independent external audit only; B2 simple fixed-time missing-event rule; B3 full IBER. Ablations: remove completeness windows, invocation-bound matching, provider audit, integrity verification separately. Use separate calibration and held-out test runs; randomize execution order and document AWS region/time-of-day.
+Metrics: precision, recall, F1, false-positive rate, inconclusive rate, detection p50/p95, evidence delivery p50/p95, containment verification time, reconstruction precision/order accuracy, modified-evidence detection rate, billed Lambda duration, cost per 1000 invocations. Report confidence intervals and denominators.
+Initial engineering targets (not claims): >=90% recall on controlled replay scenarios, <=5% false-positive rate on held-out benign/fault runs, p95 <=10 seconds only where independent evidence arrives promptly; otherwise report observed bound and why.
+11. Ownership and 8-week suggested schedule
+Week
+Owner A attack/app
+Owner B evidence
+Owner C detection
+Owner D AWS/response
+1
+Threat model, mock API
+Schema, collector design
+Matching design
+SAM scaffold, IAM
+2
+OAuth issuer, app Lambda
+Collector + SQS
+Basic normalizer
+API Gateway, CI
+3
+Replay and suppression lab
+SaaS audit + archive
+Simple detector
+Monitoring, demo wiring
+4
+Ground truth and test runner
+Idempotency + proof
+Findings + latency
+Review-2 rehearsal
+5
+Additional fault scenarios
+Integrity and Object Lock
+Completeness windows
+IAM isolation
+6
+Provider revocation tests
+Evidence verification
+Confidence logic
+Step Functions responder
+7
+Evaluation traces
+Archive forensics
+Baselines/ablations
+Cost and latency
+8
+Final hardening
+Docs and handover
+Metrics/report
+Recovery rehearsal
+
+The week plan is relative to project start, not a promise about university deadlines. Assign actual names and dates in GitHub Projects/Jira. Every issue requires owner, dependency, acceptance criterion, evidence link, and PR.
+12. Risks, mitigations and decisions
+Risk
+Mitigation / fallback
+CloudTrail mistaken for SaaS API telemetry
+Use independent mock SaaS audit; state coverage explicitly
+Extension co-compromised
+Do not make extension sole evidence source
+App-intent spoofed or suppressed
+Treat as untrusted; compare independent authorization and API evidence
+Provider revocation unavailable
+Use mock issuer and disable lab integration; record limitation
+False positives from delivery delay
+Completeness windows and source-health states
+Correlation ambiguity
+Preserve multiple candidates and confidence; never force a match
+Evidence tampering by privileged principal
+Separate IAM roles/accounts, S3 Object Lock, audit control plane
+Unexpected AWS charges
+Budgets, tags, short-lived stacks, daily cleanup
+Secret leakage in repo or screenshots
+Secret scanning, masking, disposable credentials
+Scope explosion
+Freeze Review-2 MVP before advanced features
+
+13. Deployment, operations and handover runbook
+Prerequisites
+AWS account with appropriate permissions; select and document one region; AWS CLI configured using temporary/SSO credentials.
+AWS SAM CLI, Python supported runtime, Git, pytest, and a clean test account.
+Budget alerts, resource tags Project=SealedTelemetry and Environment=Lab.
+Synthetic records, test-only OAuth issuer, and no production external SaaS credentials.
+Standard operator sequence
+1. git clone <team-repo>; git checkout <review2-tag>; verify README and prerequisites.
+2. cp .env.example .env; populate only non-secret configuration; use Secrets Manager for token material.
+3. sam build; sam deploy --guided using documented stack name and region.
+4. python scripts/seed_lab.py to provision synthetic identities/records; record run_id.
+5. pytest tests/unit; pytest tests/integration; run the normal scenario and check API response.
+6. python scripts/run_demo.py --scenario normal; capture evidence IDs and timing.
+7. python scripts/run_demo.py --scenario replay-suppression; inspect finding and provider-side audit.
+8. python scripts/run_demo.py --scenario benign-log-failure; confirm uncertainty classification.
+9. Export sanitized results and evidence manifest; tag Git commit and save environment details.
+10. Run cleanup script and sam delete; verify retained evidence policy and residual charges before deleting any protected resources.
+Commands above are planned interface contracts: scripts do not exist until implemented. Update this runbook with tested, exact command syntax, stack outputs and expected results. Object Lock retention can prevent deletion; use a separate ephemeral development archive with appropriate lifecycle and compliance review.
+Handover checkpoint template
+• Date / owner / branch / commit SHA / deployed stack and region
+• Implemented features with passing test IDs and evidence links
+• Open blockers, assumptions and known security limitations
+• Next three issues with exact acceptance criteria
+• Data schema version, deployment commands and secret storage locations (not secret values)
+• Last clean demo run_id, metrics file and screenshots
+• Rollback / cleanup state and AWS estimated cost
+14. Review-2 oral defense: anticipated questions
+Is detection real time?
+Near-real-time only when independent evidence arrives quickly; report measured end-to-end latency and distinguish detection after invocation.
+Does everything finish before Lambda terminates?
+No. The original invocation can finish while asynchronous ingestion, reconciliation, containment and forensics continue outside Lambda.
+Why not CloudWatch alone?
+Application logs may be suppressed; platform logs are incomplete for outbound SaaS operations; independent API-side evidence adds a different trust boundary.
+What is novel?
+A testable invocation-bound, completeness-aware reconciliation mechanism with explicit uncertainty and cross-source evidence, subject to prior-work comparison and ablations.
+Can you prove the token was stolen?
+The controlled scenario ground truth proves simulated exposure and replay; independent audit may corroborate unauthorized use but not always the theft mechanism.
+Can you revoke immediately?
+Only where the provider supports it; request and verify revocation separately. Do not equate API acknowledgment with immediate rejection.
+What if both logs disappear?
+Report inconclusive if no trustworthy witness exists; do not invent missing events.
+What is the actual serverless benefit?
+Event-driven processing and pay-per-use orchestration, while acknowledging cold starts, asynchronous delay and service cost.
+15. Definition of done and next actions
+Review-2 done only when a fresh team member can deploy the stack, run the four key scenarios, retrieve source evidence, inspect a finding, calculate measured latency, and explain limitations using only repository docs.
+Immediate next 48 hours: freeze threat model and one-page architecture; choose mock provider deployment method; create repository structure and schema v1; open 12 R2 issues; establish AWS budget and IAM; assign workstream owners; schedule first end-to-end integration checkpoint.
+Decision log to complete: mock API hosting choice, single vs separate AWS security account, whether OAuth issuer uses opaque tokens or JWT, source-level deadlines, archive retention, desired Review-2 date, and team member assignments.
+Appendix A. Mermaid architecture source
+flowchart LR
+ Client --> Gateway[API Gateway] --> App[Application Lambda]
+ App --> OAuth[Mock OAuth issuer]
+ App --> SaaS[Mock SaaS API]
+ Harness[Lab replay harness] --> SaaS
+ App -. Intent .-> Intake[Independent evidence intake]
+ SaaS --> Audit[SaaS-owned audit emitter] --> Intake
+ Gateway -. Access logs .-> Intake
+ Platform[Lambda platform and supported AWS audit] --> Intake
+ Intake --> Queue[SQS + DLQ] --> Normalize[Normalizer Lambda]
+ Normalize --> State[(DynamoDB correlation)]
+ Normalize --> Archive[(S3 Object Lock evidence)]
+ State --> IBER[Deadline-aware reconciler]
+ IBER --> Finding[EventBridge finding] --> Response[Step Functions response]
+ Response --> Revoke[Mock OAuth revoke / integration disable]
+ Archive --> Forensics[Reconstruction and integrity verification]
+ Finding --> Forensics
+Appendix B. Source and verification register
+• User Review-1 presentation: original uploaded PPT/PDF; compare page references before next review.
+• AWS Lambda execution lifecycle: https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtime-environment.html
+• AWS Lambda Telemetry API: https://docs.aws.amazon.com/lambda/latest/dg/telemetry-api.html
+• CloudTrail Lambda logging: https://docs.aws.amazon.com/lambda/latest/dg/logging-using-cloudtrail.html
+• S3 Object Lock: https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock.html
+• OAuth Security Best Current Practice: https://www.rfc-editor.org/rfc/rfc9700
+• OAuth Token Revocation: https://www.rfc-editor.org/rfc/rfc7009
+• MITRE ATT&CK T1528: https://attack.mitre.org/techniques/T1528/
+• Research novelty requires separate systematic paper search and verified citation matrix; do not present IBER as proven first-of-its-kind.
+
+PART II — COMPLETE DELIVERY BLUEPRINT: REVIEW 2 THROUGH FINAL IMPLEMENTATION
+Version 2.0 | 26 October 2026 | Status: implementation specification; not a record of completed development.
+This extension complements Sections 1–15 of the original master plan. All durations, targets, and assignments are planning assumptions until confirmed by the team. No attack result, deployment, or measured performance is implied.
+16. Delivery gates and explicit scope
+Gate
+Required outcome
+Not required yet
+G0 — design freeze
+Threat model, event schema, IAM boundary, mock provider contract, ownership approved
+Live attack detection
+G1 — Review 2
+Deployed Lambda; baseline logs; simulated token exposure/replay; independent provider audit; simple detector; recorded timing
+Automatic production revocation, ML
+G2 — integration
+Durable queue; deduplication; integrity archive; fault handling; repeatable IaC
+Advanced dashboard
+G3 — research
+IBER completeness engine; baselines; ablations; held-out experiments
+Multi-cloud support
+G4 — final
+Response and recovery; evaluated metrics; runbooks; reproducible handover and final defense
+Universal token theft detection
+
+17. Architecture deployment profiles
+Profile A (Review 2): one isolated AWS sandbox account, separate workload and security IAM roles, API Gateway + workload Lambda, mock OAuth/SaaS service with separate audit writer, collector Lambda, SQS, DynamoDB, S3 and a detector Lambda. Profile B (final): preferably separate workload and security AWS accounts, cross-account event delivery, S3 Object Lock with protected retention, Step Functions responder, CloudTrail and provider audit integration.
+Critical limitation: the workload cannot reliably attest to its own intent after full compromise. An intent record is a claim, not proof. Corroboration must come from a source the compromised workload cannot edit. A mock provider can provide ground truth for the prototype; real providers differ in audit coverage and revocation semantics.
+18. Review-2 build plan: execution-ready tickets
+Ticket
+Task
+Owner
+Deliverable
+Acceptance
+R2-01
+Create AWS sandbox and budget alarms
+Cloud lead
+Account, region, tagged resources, least-privilege deployment role, budget notifications
+CLI identity, account/region recorded, alarm screenshot
+R2-02
+Provision infrastructure as code
+Cloud lead
+SAM/CDK stacks with environment names and outputs
+Fresh deploy and destroy both succeed
+R2-03
+Implement mock OAuth issuer
+Attack lead
+Disposable short-lived bearer tokens; scoped test resources; revocation endpoint; no production credentials
+Valid, expired, revoked and wrong-scope requests tested
+R2-04
+Implement mock SaaS API and independent audit
+Attack lead
+Protected read/export endpoint; audit record with request ID, actor, action, time, outcome
+Every accepted test call produces provider-owned audit event
+R2-05
+Build legitimate Lambda integration
+Cloud lead
+API Gateway route invokes Lambda, fetches scoped test token, calls mock SaaS
+200 response, correlation ID, no raw token logged
+R2-06
+Collect baseline telemetry
+Evidence lead
+Structured application logs, API Gateway access logs, Lambda platform logs, configured CloudTrail where relevant
+Show each source separately and document blind spots
+R2-07
+Implement isolated evidence collector
+Evidence lead
+Authenticated collector ingress; canonical schema; SQS buffering; DynamoDB idempotency
+Valid records persisted; malformed records rejected
+R2-08
+Build tamper-aware archive MVP
+Evidence lead
+S3 evidence object, SHA-256 checksum, restricted write role, source/receipt times
+Archived event can be retrieved and verified
+R2-09
+Simulate token exposure and replay
+Attack lead
+Test-only credential copied into isolated harness; replay to mock API; ground truth record
+Unauthorized test action appears in provider audit; no real accounts affected
+R2-10
+Simulate application log suppression
+Attack lead
+Feature flag in disposable test build disables application security event emission
+Application event absent but provider audit still present
+R2-11
+Implement initial detector
+Detection lead
+Rule: unmatched provider audit action after bounded waiting; distinguish pending and suspicious
+Normal, replay, benign delayed event tested
+R2-12
+Record demo and evidence
+All
+10-minute demo, deployment IDs, traces, screenshots, metric CSV, known limitations
+Rehearsal completes from clean deployment; artifacts linked
+
+19. Review-2 exact demo script and timing
+Minute
+Action
+Visible proof
+0–1
+Show trust-boundary diagram and deployed stack
+AWS resources and two independent evidence owners
+1–2
+Invoke legitimate workflow
+API Gateway request and Lambda success
+2–3
+Show normal logs and mock SaaS audit
+Matching request IDs and source timestamps
+3–4
+Explain disposable token and attack harness
+Scope, expiry and synthetic-only resources
+4–5
+Run controlled replay
+Provider audit records replay as separate action
+5–6
+Suppress application-level security logging in test build
+Application event missing, platform/provider observations remain
+6–7
+Run correlation detector
+Finding with evidence IDs, confidence and decision timestamp
+7–8
+Open durable evidence record
+S3 object, checksum and DynamoDB state
+8–9
+Show timing and benign-fault comparison
+Detection latency plus pending/inconclusive case
+9–10
+State limitations and final research roadmap
+No unsupported real-time or guaranteed-revocation claim
+
+20. Review-2 failure contingencies
+If the AWS deployment fails: use pre-recorded traces from the same versioned build and show the failed deployment logs; do not represent a recording as live.
+If CloudTrail is delayed: show platform/ingress/provider evidence and explicitly identify CloudTrail as asynchronous supplementary evidence.
+If the detector has no finding: inspect correlation IDs, time-window configuration, SQS DLQ, and collector health before changing thresholds.
+If mock provider audit is unavailable: stop the claim of independent corroboration; demo only ingestion health and mark the security result incomplete.
+If the simulated replay is rejected: verify test token scope, expiry and intended mock resource; never bypass controls on a real provider.
+21. Final implementation work packages
+WP
+Theme
+Implementation
+Exit test
+F1
+Harden trust boundaries
+Separate AWS security account or equivalent; IAM boundary review; workload cannot alter security archive or detector policy
+Attempted unauthorized evidence delete and policy change denied
+F2
+Production-grade evidence pipeline
+SQS DLQ, retries, schema versions, poison-message handling, idempotency and source health
+Duplicates do not duplicate findings; failures visible and replayable
+F3
+IBER action correlation
+Action IDs, credential pseudonyms, provider request IDs where supported, time-bounded fallback matching
+Ambiguous matches labeled as ambiguous
+F4
+Completeness-aware state machine
+PENDING, CONSISTENT, SUSPICIOUS, CORROBORATED, INCONCLUSIVE; per-source deadlines
+Late evidence updates decision with audit trail
+F5
+Integrity and chain of custody
+Canonical serialization, record hashes, collector receipt chain, S3 Object Lock where feasible, verification CLI
+Modified archived object detected; missing original evidence not falsely claimed recovered
+F6
+Containment orchestration
+Step Functions policy gate, mock revocation, integration disablement, verification and manual override
+Action result recorded; false-positive case does not auto-revoke
+F7
+Recovery and forensics
+Incident timeline, gaps, affected synthetic records, rotate and redeploy clean workload
+Recover from attack and produce verifiable incident report
+F8
+Provider realism
+Optional authorized SaaS sandbox with documented audit and revocation coverage
+Provider differences and latency reported, not hidden
+F9
+Baseline and ablation experiments
+B0 application logs, B1 independent-only, B2 fixed deadline, B3 full IBER; remove components
+Reproducible per-scenario results with held-out test set
+F10
+Documentation and release
+Versioned IaC, CI tests, threat model, costs, cleanup, operator guide and final report
+New contributor deploys and runs sample experiment from README
+
+22. End-to-end event and decision contract
+EvidenceEvent v1 mandatory fields: schema_version, event_id, run_id, source_id, trust_tier, event_type, event_time_utc, collector_received_at_utc, invocation_id (nullable), action_id (nullable), provider_request_id (nullable), actor_pseudonym, credential_fingerprint (nullable), operation, resource_pseudonym, outcome, collector_receipt_id, canonical_hash. Never persist bearer tokens or refresh tokens.
+Finding v1 mandatory fields: finding_id, run_id, first_observed_at, decided_at, state, rule_version, correlated_event_ids, missing_expected_sources, source_health_snapshot, reason_codes, confidence_category, response_policy, response_status, reconstruction_status.
+State invariants: PENDING is not an attack; INCONCLUSIVE is not benign; CORROBORATED requires independent supporting observations; receipt time never replaces source time; a detector decision must retain evidence IDs and rule version; later evidence may supersede but must not erase prior decisions.
+23. Correlation algorithm: implementable pseudocode
+on_evidence(event):    validate_schema_and_source(event)    persist_idempotently(event.event_id)    update_source_health(event.source_id, event.collector_received_at)    keys = candidate_keys(event.invocation_id, event.action_id,                          event.provider_request_id, event.actor_pseudonym)    for case in find_candidate_cases(keys, bounded_time_window):        reconcile(case)reconcile(case):    observed = independently_observed_provider_actions(case)    authorized = match_to_expected_actions(case, strict_ids_first=True)    if observed and not authorized:        if corroboration_sufficient(case):            decide(case, "CORROBORATED", reason="UNMATCHED_EXTERNAL_ACTION")        elif deadlines_open(case):            decide(case, "PENDING", reason="WAITING_FOR_EVIDENCE")        else:            decide(case, "SUSPICIOUS", reason="UNMATCHED_LOW_CONFIDENCE")    elif missing_required_evidence(case):        if deadlines_open(case):            decide(case, "PENDING", reason="LATE_SOURCE")        elif source_unhealthy(case):            decide(case, "INCONCLUSIVE", reason="COLLECTOR_FAILURE")        else:            decide(case, "SUSPICIOUS", reason="EVIDENCE_GAP")    else:        decide(case, "CONSISTENT", reason="MATCHED_ACTION")    append_decision_history(case)
+24. Test matrix and fault injection
+Case
+Injected condition
+Expected state / observation
+T01
+Authorized request with all evidence
+CONSISTENT
+T02
+Token replay, application log suppressed, provider audit available
+CORROBORATED or SUSPICIOUS according to corroboration policy
+T03
+Application log missing, no unauthorized external action
+SUSPICIOUS telemetry gap or INCONCLUSIVE; not confirmed attack
+T04
+Provider audit arrives late but before deadline
+PENDING then updated classification
+T05
+Provider audit arrives after deadline
+Decision history preserved; re-evaluation recorded
+T06
+Collector outage
+INCONCLUSIVE; health alert
+T07
+Duplicate SQS delivery
+One logical evidence event and no duplicate response
+T08
+Out-of-order timestamps
+Matching unaffected by arrival order
+T09
+Expired/revoked test token
+Provider rejects request; response recorded
+T10
+Wrong audience/scope token
+Provider rejects; no fabricated successful exfiltration
+T11
+Corrupted evidence object
+Integrity verification fails
+T12
+Unauthorized workload role attempts archive deletion
+Denied by IAM/retention controls
+T13
+Legitimate high-volume export
+No automatic malicious verdict based solely on volume
+T14
+Provider has no request-ID correlation
+Fallback matching marked lower confidence
+T15
+Response API timeout
+Retry/unknown response recorded; never claim containment succeeded
+T16
+Clean recovery deployment
+New token works; old test token unusable under observed provider behavior
+
+25. Experiment design, reproducibility and reporting
+For each test run, capture scenario ID, seed, deployment version, AWS region, start/end timestamps, expected events, received events, detector output, response outcome, per-source delay and billed/estimated costs. Keep immutable ground truth generated by the harness separate from detector inputs. Split train/calibration/test by run and scenario, not randomly by near-duplicate event.
+Report precision, recall, F1, false-positive rate, inconclusive rate, median and P95 detection latency, P95 containment latency, reconstruction completeness, integrity-test detection rate, added invocation latency and per-1000-run AWS cost. Targets are provisional until baseline data is measured.
+26. Eight-week reference schedule with dependencies
+Week
+Critical path
+Reviewable artifact
+1
+G0 threat model, repository, IaC, mock API contracts
+Approved design and clean AWS deploy
+2
+Workload Lambda, API Gateway, OAuth mock, normal logs
+Normal invocation end to end
+3
+Independent provider audit, collector, DynamoDB/S3
+Cross-source evidence visible
+4
+Replay simulation, suppression, first detector, Review-2 rehearsal
+G1 Review-2 demo and traces
+5
+Queue hardening, completeness windows, source health
+G2 integration tests
+6
+Archive integrity, responder, recovery and report generator
+Containment/recovery demo
+7
+Baselines, ablations, repeated trials and cost analysis
+G3 results tables
+8
+Fixes, full rerun, final report, handover and defense
+G4 reproducible release
+
+Schedule is illustrative; if Review 2 occurs earlier, prioritize G1 and move advanced features after the review.
+27. Suggested repository and interfaces
+sealed-telemetry/  infra/{workload,security,monitoring}/  services/{workload-lambda,mock-oauth,mock-saas,evidence-collector,detector,responder,reporter}/  packages/{event-schema,correlation,integrity}/  experiments/{scenarios,ground-truth,runner,analysis}/  tests/{unit,integration,e2e,security,load}/  docs/{architecture,threat-model,review-2,runbooks,adr,results}/  scripts/{deploy,seed,run-demo,verify-evidence,cleanup}/  .github/workflows/  README.md
+Every service must expose a README containing its purpose, inputs/outputs, required environment variables, IAM permissions, deployment command, local test command, expected logs, troubleshooting, and cleanup.
+28. CI/CD and operational readiness
+Pull requests require schema validation, unit tests, formatting, static analysis and dependency scanning.
+Deploy development and evaluation stacks using versioned IaC; do not click-create undocumented security resources.
+Use per-environment configuration; never commit credentials, token values, or private keys.
+Emit structured health metrics for collector success/failure, queue age, DLQ depth, unmatched evidence and detector latency.
+Enable AWS budget alerts and tag resources with project, environment, owner and expiry.
+Document rollback, incident response and destruction procedures; retain only authorized synthetic evidence for the approved duration.
+29. Team handover and decision log
+Every ticket must contain: ID; owner; branch/commit; architecture decision record (if applicable); inputs/outputs; AWS resources; IAM changes; reproducible commands; screenshots or test report; unresolved bugs; next action; reviewer signoff. A ticket is not complete if only its author can run it.
+Decision ID
+Decision to record
+Why it matters
+ADR-001
+Mock provider vs real sandbox
+Ground truth and authorization
+ADR-002
+One vs two AWS accounts
+Trust isolation and cost
+ADR-003
+Event transport and delivery guarantees
+Latency, duplicates, loss
+ADR-004
+Evidence deadline selection
+False positives vs speed
+ADR-005
+Automatic vs manual containment
+Safety and provider semantics
+ADR-006
+Integrity chain and retention
+Forensic defensibility
+
+30. Final defense package and acceptance gate
+Architecture: current deployed diagram, threat boundaries, sequence diagram and AWS inventory.
+Security: controlled replay and suppression demonstration, independent audit proof, evidence integrity and limitations.
+Research: literature gap matrix, explicit hypotheses, baselines, ablation study, repeatability and statistical uncertainty.
+Performance: detection and response time distributions, cold-start effects, delayed events, overhead and cost.
+Recovery: revoked/disabled test integration verified, restored clean workload and incident reconstruction report.
+Handover: clean-room setup tested by a teammate, versioned source, sample sanitized dataset, runbooks and known-issues backlog.
+31. Immediate next sprint: first ten working days
+Day
+Work
+Done when
+1
+Confirm team roles and AWS budget; freeze schema
+Signed-off ADRs and event JSON examples
+2
+Create repository, CI and IaC skeleton
+Clean deployment pipeline passes
+3
+Mock issuer and test API
+Scoped token issued and validated
+4
+Provider audit writer and test resources
+Audit produced for every accepted request
+5
+Lambda integration via API Gateway
+Normal request returns success and trace ID
+6
+Structured application/platform logs
+Evidence from separate sources demonstrated
+7
+Collector, SQS and DynamoDB
+Events accepted, deduplicated and queryable
+8
+Controlled replay and suppression harness
+Ground truth shows replay and missing app log
+9
+Initial detector and S3 archive
+Finding and evidence hash available
+10
+Full rehearsal, failure tests, metric capture
+Review-2 gate checklist signed off
+
+END OF MASTER PLAN — Update the status, owners, measured metrics, and decision log after every sprint. Do not substitute planning targets for experimental results.

@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sealed-telemetry"
+version = "0.1.0"
+description = "Synthetic OAuth evidence reconciliation research lab"
+requires-python = ">=3.12"
+dependencies = ["boto3>=1.35,<2"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9", "ruff>=0.11,<1", "mypy>=1.15,<2", "PyYAML>=6,<7", "pip-audit>=2.9,<3", "moto[s3,dynamodb,sqs]>=5,<6"]
+
+[project.scripts]
+sealed-telemetry = "sealed_telemetry.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
