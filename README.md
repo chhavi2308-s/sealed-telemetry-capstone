@@ -45,7 +45,7 @@ ruff format --check src tests scripts
 mypy src
 pytest -q
 cfn-lint infra/template.yaml
-pip-audit -r requirements.lock
+pip-audit --vulnerability-service osv --no-deps --disable-pip -r requirements.lock
 ```
 
 CI performs these checks without deployment permissions. Lock snapshots include exact transitive versions. AWS deployment requires account, region, role, budget, retention and change-set review; no long-lived keys belong in this repository. See scripts/preflight.py and docs/runbook.md. No automatic deployment runs on push.

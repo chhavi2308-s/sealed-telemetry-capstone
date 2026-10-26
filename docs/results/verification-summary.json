@@ -1,0 +1,20 @@
+{
+  "tests": "59",
+  "failures": "0",
+  "errors": "0",
+  "skipped": "0",
+  "time": "10.141",
+  "python": "3.12",
+  "ruff_check": "passed",
+  "ruff_format": "passed",
+  "mypy_strict": "passed",
+  "sam_validate_lint": "passed",
+  "sam_build": "passed (hash-verified short Windows staging path)",
+  "cfn_lint": "passed",
+  "aws_deployment": "not_performed",
+  "remote_ci": "not_run",
+  "dependency_audit_service": "OSV",
+  "dependency_vulnerabilities": 0,
+  "dependency_count": 63,
+  "source_bytes_note": "SHA manifests describe tested working-tree bytes. The deliverable ZIP preserves those bytes; Git may normalize text line endings on another platform."
+}

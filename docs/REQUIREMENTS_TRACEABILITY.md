@@ -24,3 +24,24 @@ The complete source extracts in docs/specifications are the specification regist
 | OPS-01 | Fault contracts, rollback, budget, cleanup (F10) | docs/runbook.md, scripts | deployed rehearsal; cloud approval |
 | RES-01 | Literature matrix, poster/report/video (final defense) | docs/research | verified sources and review artifacts; EXP-01 |
 | OPT-01 | Optional real authorized provider (F8) | future adapter | explicit separate authorization |
+
+
+## Verified implementation checkpoint
+
+| Ticket | Actual implementation and proof | Status |
+|---|---|---|
+| ENG-01 | pyproject, exact locks, pinned/read-only CI; 59 passing tests, Ruff, strict mypy, SAM validate/build | Local foundation verified; remote CI pending |
+| LAB-01/02 | provider.py and cloud_lab.py; test_provider_security_and_verified_response, test_issuer_and_provider_outbox, stream acknowledgement regression | Local/Moto verified; live provider pending |
+| LAB-03 | cloud_lab.gateway/app, WorkloadApi, issuer and SaaS APIs | Packaged candidate; no deployed 200 response claimed |
+| OBS-01 | JSON app logs, default platform logs and API access-log groups in template | Supplementary archive adapters and configured CloudTrail coverage pending KI-04 |
+| EVD-01 | aws_handlers.collector, schema.py, schemas/evidence-v1.schema.json | Source spoof/unknown/oversize/content conflict tests pass; live IAM test pending |
+| EVD-02/03 | partial SQS batches, S3-first conditional index, active TTL, newest health, exact-version export | Recovery/idempotency/tampering tests pass; live DLQ/retention/deny rehearsal pending |
+| SEC-01 | own-function log policies, source-role-bound intake, workload archive denial, separate response key/role | Static/Moto checks; final cross-account authorization pending |
+| DET-01/02 | reconciliation.py, transactional cloud history, health monitor and configurable policy | All five states tested; duplicates/retries, clock skew, late state revision, cross-run replay and invalid policy handled |
+| DEM-01 | cli.py and scripts/cloud_demo.py; docs/results/demo | Three local demos verified; live AWS Review-2 not complete |
+| RSP-01 | cloud_response.py, EventBridge/Step Functions, explicit approval output, response-key lookup | Mock-provider rejection, failed verification and idempotent evidence tested; live execution pending |
+| REC-01 | local containment-recovery, integration disable/restore and clean-code runbook | Local verified; cloud recovery and modified-resource restore pending |
+| FOR-01 | reporting.py and scripts/export_incident.py | Exact S3 version/hash checks tested; investigator export not yet exercised on AWS |
+| EXP-01/02 | fifteen scenarios, eight detectors/ablations, seed manifest, separate labels, metrics and calibration functions | 30 local smoke runs measured; held-out AWS latency/overhead/cost are null/pending |
+| OPS-01 | preflight.py, cleanup.py, failure-contracts and runbook | Read-only gates and explicit deletion flags implemented; deployment/rollback/cleanup unverified |
+| RES-01/OPT-01 | Original references preserved; research protocol and explicit limitations | Novelty/literature comparison, final artifacts and optional real authorized provider remain unfinished |

@@ -2026,8 +2026,13 @@
               "Default": "ApprovalRequired"
             },
             "ApprovalRequired": {
-              "Type": "Succeed",
-              "Comment": "Alert only. Operator must start a new explicitly approved execution."
+              "Type": "Pass",
+              "Result": {
+                "status": "approval_required",
+                "verified_at": null
+              },
+              "ResultPath": "$.response",
+              "End": true
             },
             "Contain": {
               "Type": "Task",
