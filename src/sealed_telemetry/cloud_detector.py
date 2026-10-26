@@ -9,13 +9,14 @@ from boto3.dynamodb.conditions import Key
 from boto3.dynamodb.types import TypeSerializer
 
 from sealed_telemetry.aws_support import SDK_CONFIG
-from sealed_telemetry.reconciliation import reconcile
+from sealed_telemetry.reconciliation import Policy, reconcile
 from sealed_telemetry.schema import Evidence, canonical, digest, timestamp, utcnow
 
 
 def detector(event: dict[str, Any], context: Any) -> dict[str, int]:
     table = boto3.resource("dynamodb", config=SDK_CONFIG).Table(os.environ["EVENT_TABLE"])
     decisions = boto3.resource("dynamodb", config=SDK_CONFIG).Table(os.environ["DECISION_TABLE"])
+    policy = Policy(**json.loads(os.environ.get("POLICY_JSON", "{}")))
     now = utcnow()
     operational = boto3.resource("dynamodb", config=SDK_CONFIG)
     health = {}
@@ -67,7 +68,7 @@ def detector(event: dict[str, Any], context: Any) -> dict[str, int]:
         integrity_ok = all(
             digest(e["raw"]) == e["receipt"].get("canonical_hash") for e in envelopes
         )
-        for decision in reconcile(records, now, health):
+        for decision in reconcile(records, now, health, policy):
             if not integrity_ok:
                 decision.update(
                     state="INCONCLUSIVE",

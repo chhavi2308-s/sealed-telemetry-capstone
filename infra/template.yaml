@@ -16,6 +16,11 @@
     },
     "ExpiresOn": {
       "Type": "String"
+    },
+    "ReconciliationPolicy": {
+      "Type": "String",
+      "Default": "{}",
+      "Description": "JSON iber Policy fields from measured benign calibration; empty uses provisional lab defaults"
     }
   },
   "Globals": {
@@ -504,12 +509,7 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        },
-        "ManagedPolicyArns": [
-          {
-            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-          }
-        ]
+        }
       }
     },
     "AppRole": {
@@ -526,12 +526,7 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        },
-        "ManagedPolicyArns": [
-          {
-            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-          }
-        ]
+        }
       }
     },
     "IssuerRole": {
@@ -548,12 +543,7 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        },
-        "ManagedPolicyArns": [
-          {
-            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-          }
-        ]
+        }
       }
     },
     "SaasRole": {
@@ -570,12 +560,7 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        },
-        "ManagedPolicyArns": [
-          {
-            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-          }
-        ]
+        }
       }
     },
     "AuditForwarderRole": {
@@ -592,12 +577,7 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        },
-        "ManagedPolicyArns": [
-          {
-            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-          }
-        ]
+        }
       }
     },
     "CollectorRole": {
@@ -614,12 +594,7 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        },
-        "ManagedPolicyArns": [
-          {
-            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-          }
-        ]
+        }
       }
     },
     "NormalizerRole": {
@@ -636,12 +611,7 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        },
-        "ManagedPolicyArns": [
-          {
-            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-          }
-        ]
+        }
       }
     },
     "DetectorRole": {
@@ -658,12 +628,7 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        },
-        "ManagedPolicyArns": [
-          {
-            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-          }
-        ]
+        }
       }
     },
     "CollectorFunction": {
@@ -768,6 +733,9 @@
             },
             "HEALTH_TABLE": {
               "Ref": "SourceHealth"
+            },
+            "POLICY_JSON": {
+              "Ref": "ReconciliationPolicy"
             }
           }
         },
@@ -1073,6 +1041,9 @@
             },
             "HEALTH_TABLE": {
               "Ref": "SourceHealth"
+            },
+            "POLICY_JSON": {
+              "Ref": "ReconciliationPolicy"
             }
           }
         },
@@ -1874,12 +1845,7 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        },
-        "ManagedPolicyArns": [
-          {
-            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-          }
-        ]
+        }
       }
     },
     "ResponderFunction": {
@@ -1940,7 +1906,8 @@
               "Effect": "Allow",
               "Action": [
                 "dynamodb:GetItem",
-                "dynamodb:UpdateItem"
+                "dynamodb:UpdateItem",
+                "dynamodb:PutItem"
               ],
               "Resource": {
                 "Fn::GetAtt": [
@@ -2239,12 +2206,7 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        },
-        "ManagedPolicyArns": [
-          {
-            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-          }
-        ]
+        }
       }
     },
     "HealthFunction": {
@@ -2553,6 +2515,296 @@
             "Ref": "AlarmTopic"
           }
         ]
+      }
+    },
+    "AppLogPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "OwnFunctionLogsOnly",
+        "Roles": [
+          {
+            "Ref": "AppRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "AppLogs",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "GatewayLogPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "OwnFunctionLogsOnly",
+        "Roles": [
+          {
+            "Ref": "GatewayRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "GatewayLogs",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "IssuerLogPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "OwnFunctionLogsOnly",
+        "Roles": [
+          {
+            "Ref": "IssuerRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "IssuerLogs",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "SaasLogPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "OwnFunctionLogsOnly",
+        "Roles": [
+          {
+            "Ref": "SaasRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "SaasLogs",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "AuditForwarderLogPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "OwnFunctionLogsOnly",
+        "Roles": [
+          {
+            "Ref": "AuditForwarderRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "AuditForwarderLogs",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "CollectorLogPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "OwnFunctionLogsOnly",
+        "Roles": [
+          {
+            "Ref": "CollectorRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "CollectorLogs",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "NormalizerLogPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "OwnFunctionLogsOnly",
+        "Roles": [
+          {
+            "Ref": "NormalizerRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "NormalizerLogs",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "DetectorLogPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "OwnFunctionLogsOnly",
+        "Roles": [
+          {
+            "Ref": "DetectorRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "DetectorLogs",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ResponderLogPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "OwnFunctionLogsOnly",
+        "Roles": [
+          {
+            "Ref": "ResponderRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "ResponderLogs",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "HealthLogPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "OwnFunctionLogsOnly",
+        "Roles": [
+          {
+            "Ref": "HealthRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "HealthLogs",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
       }
     }
   },

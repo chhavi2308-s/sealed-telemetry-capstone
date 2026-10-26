@@ -144,9 +144,16 @@ def saas(event: dict[str, Any], context: Any) -> dict[str, Any]:
         )
         .get("Item")
     )
+    integration = (
+        boto3.resource("dynamodb", config=SDK_CONFIG)
+        .Table(os.environ["TOKEN_TABLE"])
+        .get_item(Key={"token_hash": "integration:enabled"}, ConsistentRead=True)
+        .get("Item", {"enabled": True})
+    )
     operation = "records:export" if event.get("path", "").endswith("/export") else "records:read"
     valid = bool(
-        row
+        integration["enabled"]
+        and row
         and not row["revoked"]
         and row["scope"] == operation
         and row["audience"] == "synthetic-saas"

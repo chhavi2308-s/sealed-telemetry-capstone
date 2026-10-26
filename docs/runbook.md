@@ -2,7 +2,7 @@
 
 ## Local reproduction
 
-Use README commands in a fresh virtual environment. Test/demo output is synthetic. Do not reuse a demo directory. Normal, delayed-audit, duplicate, out-of-order and bulk scenarios should be consistent; replay-suppression suspicious with a separate inconclusive app-gap case; benign-log-failure inconclusive; bound-replay corroborated under the one-use policy; tampering fails integrity. `response-failure` must remain unverified. Token expiry, wrong scope/audience and successful/failed revocation are covered by tests.
+Use README commands in a fresh virtual environment. Test/demo output is synthetic. Do not reuse a demo directory. Normal, delayed-audit, duplicate, out-of-order and bulk scenarios should be consistent; replay-suppression suspicious with a separate inconclusive app-gap case; benign-log-failure inconclusive; bound-replay inconclusive because retries and copied metadata are ambiguous; tampering fails integrity. `response-failure` must remain unverified. Token expiry, wrong scope/audience and successful/failed revocation are covered by tests.
 
 ## Deployment gate
 
@@ -33,10 +33,18 @@ If queue age or DLQ alarm fires, inspect consumer error metrics and message IDs,
 
 EventBridge starts a Step Functions workflow that ends at ApprovalRequired by default. This is alert-only, not containment success or a human callback UI. Operator reviews evidence, health, scope and uncertainty, then starts a new execution with the sanitized finding, decision_id and `approved:true`. No bearer token is placed in workflow input/history. Responder decrypts only the relevant lab token under a separate KMS key, marks the registry revoked, calls the real mock SaaS endpoint and requires 403 before reporting verified. A timeout is retryable; failed verification is never successful. Response evidence is collected independently. Cached response results are idempotent by decision_id; an unverified cached result requires investigation/new authorized action rather than silent success.
 
-Recovery: redeploy a reviewed known-good commit, disable exposure, invoke gateway to issue a fresh token and verify a new synthetic read succeeds. Verify the revoked old credential still fails. Local tests cover rotation old/new behavior; cloud clean-deployment recovery remains unverified. Synthetic resources are read-only, so no fabricated restore is reported. Disabling the entire integration is an unfinished containment action.
+Recovery: redeploy a reviewed known-good commit, disable exposure, invoke gateway to issue a fresh token and verify a new synthetic read succeeds. Verify the revoked old credential still fails. Local tests cover rotation old/new behavior; cloud clean-deployment recovery remains unverified. Synthetic resources are read-only, so no fabricated restore is reported. An approved execution may include `disable_integration:true`; the responder disables the mock integration and still verifies HTTP rejection. Re-enabling is a separate explicit operator registry change after clean-code review, not an automatic response reversal.
 
 ## Rollback and teardown
 
 Rollback application code with `sam build` from the previously reviewed commit and a reviewed change set. Do not roll back evidence tables or reuse another environment's HMAC key. Keep saved evidence version manifests. CloudFormation rollback and partial-failure recovery must be rehearsed after approval.
 
 Run `python scripts/cleanup.py --stack STACK --account ACCOUNT --region REGION --output cleanup-plan.json` for a read-only resource inventory. Deleting resources requires `--execute --approve-account ACCOUNT`; this command has NOT been run. It requests stack deletion but never deletes retained resources, bypasses retention, purges queues or schedules KMS deletion. Wait for stack completion and compare retained resources, staging buckets, logs, secrets recovery state and remaining charges. Only the owner can separately approve disposal of retained evidence/keys. Budget alerts do not cap AWS spend.
+
+## Calibration, export and Windows build notes
+
+Use `python scripts/calibrate.py --input benign-delays.json --output calibrated-policy.json`. Input is a map from source to independently measured non-negative delivery-delay samples in seconds. Review the emitted policy and supply its JSON through the ReconciliationPolicy SAM parameter; defaults are provisional.
+
+Use `python scripts/export_incident.py --run-id RUN --event-table TABLE --decision-table TABLE --archive-bucket BUCKET --region REGION --output incident.json` with investigator read permissions. Alternatively use `--credential-fingerprint HMAC` instead of run ID to reconstruct across provider-assigned research runs. Export requires DynamoDB index/history reads, S3 GetObjectVersion and evidence-key decrypt; no responder privilege is needed.
+
+On Windows, install SAM tooling and clone/build in a short directory. Long repository paths can exceed dependency extraction limits, especially with cached `.aws-sam/deps` paths. This session validated and built identical source from a short staging directory, with file hashes preserved. No system long-path setting was modified. Linux CI also validates/builds SAM without cloud credentials.

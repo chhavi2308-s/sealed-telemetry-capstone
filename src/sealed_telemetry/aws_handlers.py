@@ -11,6 +11,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 from sealed_telemetry.aws_support import SDK_CONFIG
+from sealed_telemetry.reconciliation import Policy
 from sealed_telemetry.schema import Evidence, canonical, digest, timestamp, utcnow
 
 LOG = logging.getLogger(__name__)
@@ -160,10 +161,19 @@ def persist(envelope: dict[str, Any]) -> None:
             if exc.response["Error"]["Code"] != "ConditionalCheckFailedException":
                 raise
     elif event.source_id != "responder":
+        policy = Policy(**json.loads(os.environ.get("POLICY_JSON", "{}")))
+        activation_seconds = max(
+            900,
+            int(
+                max(policy.provider_deadline, policy.gateway_deadline, policy.app_deadline)
+                + policy.clock_skew
+                + 120
+            ),
+        )
         operational.Table(os.environ["ACTIVE_TABLE"]).put_item(
             Item={
                 "credential_fingerprint": event.credential_fingerprint,
-                "expires_at": int(timestamp(utcnow()).timestamp()) + 900,
+                "expires_at": int(timestamp(utcnow()).timestamp()) + activation_seconds,
             }
         )
     # Archive first, index second. A crash between them is recoverable by queue redelivery.

@@ -1,5 +1,6 @@
 """Pure IBER rules: labels and scenario ground truth are deliberately absent."""
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,6 +14,19 @@ class Policy:
     app_deadline: float = 10
     matching_window: float = 60
     clock_skew: float = 30
+
+    def __post_init__(self) -> None:
+        for value in (
+            self.provider_deadline,
+            self.gateway_deadline,
+            self.app_deadline,
+            self.matching_window,
+            self.clock_skew,
+        ):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError("numeric reconciliation parameters required")
+            if not math.isfinite(value) or value < 0:
+                raise ValueError("finite non-negative reconciliation parameters required")
 
 
 DEFAULT_POLICY = Policy()
@@ -61,6 +75,10 @@ def reconcile(
         results.append(
             {
                 "case_id": anchor.run_id + ":" + anchor.event_id,
+                "finding_id": anchor.run_id + ":" + anchor.event_id,
+                "residual_uncertainty": (
+                    "Evidence does not establish theft mechanism or attacker identity"
+                ),
                 "run_id": anchor.run_id,
                 "credential_fingerprint": anchor.credential_fingerprint,
                 "affected_identity": anchor.actor_pseudonym,
@@ -89,34 +107,31 @@ def reconcile(
             decide(obs, "CONSISTENT", "PROVIDER_DENIED_NO_SUCCESS_CLAIM", [obs], [], "medium")
         elif not health.get("provider", False) or not health.get("gateway", False):
             decide(obs, "INCONCLUSIVE", "SOURCE_UNHEALTHY_OR_UNKNOWN", [obs, *group], [], "low")
-        elif (
-            len(group) == 1
-            and uses[group[0].event_id] > 1
-            and elapsed >= policy.gateway_deadline + policy.clock_skew
-            and len(
-                {
-                    other.provider_request_id
-                    for other in observed
-                    if other.outcome == "success"
-                    and other.action_id == group[0].action_id
-                    and other.invocation_id == group[0].invocation_id
-                }
-            )
-            > 1
+        elif any(
+            rev.source_id == "responder"
+            and rev.event_type == "RESPONSE_ACTION"
+            and rev.operation == "token:revoke:verify"
+            and rev.outcome == "success"
+            and rev.credential_fingerprint == obs.credential_fingerprint
+            and (timestamp(obs.event_time_utc) - timestamp(rev.event_time_utc)).total_seconds()
+            > policy.clock_skew
+            for rev in events
         ):
+            revocations = [
+                rev
+                for rev in events
+                if rev.source_id == "responder"
+                and rev.event_type == "RESPONSE_ACTION"
+                and rev.outcome == "success"
+                and rev.operation == "token:revoke:verify"
+                and rev.credential_fingerprint == obs.credential_fingerprint
+                and timestamp(rev.event_time_utc) < timestamp(obs.event_time_utc)
+            ]
             decide(
                 obs,
                 "CORROBORATED_SUSPECTED_ABUSE",
-                "ONE_USE_AUTHORIZATION_REPLAY",
-                [
-                    group[0],
-                    *[
-                        other
-                        for other in observed
-                        if other.action_id == group[0].action_id
-                        and other.invocation_id == group[0].invocation_id
-                    ],
-                ],
+                "SUCCESS_AFTER_VERIFIED_REVOCATION",
+                [obs, *revocations],
                 [],
                 "high",
             )

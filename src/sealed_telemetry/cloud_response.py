@@ -47,6 +47,8 @@ def responder(event: dict[str, Any], context: Any) -> dict[str, Any]:
         UpdateExpression="SET revoked = :yes",
         ExpressionAttributeValues={":yes": True},
     )
+    if event.get("disable_integration") is True:
+        table.put_item(Item={"token_hash": "integration:enabled", "enabled": False})
     verification = https_json(
         os.environ["SAAS_URL"],
         headers={"Authorization": "Bearer " + token, "X-Run-Id": event["run_id"]},
@@ -60,6 +62,7 @@ def responder(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "run_id": event["run_id"],
         "verification_status": verification["status"],
         "recovery": "not_requested",
+        "integration_disabled": event.get("disable_integration") is True,
     }
     result["recovery"] = "manual_clean_redeployment_required"
     evidence = new_event(

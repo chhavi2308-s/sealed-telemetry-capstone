@@ -21,6 +21,8 @@ class Provider:
           CREATE TABLE IF NOT EXISTS tokens (
             hash TEXT PRIMARY KEY, token_id TEXT UNIQUE NOT NULL, scope TEXT NOT NULL,
             audience TEXT NOT NULL, expires TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0);
+          CREATE TABLE IF NOT EXISTS integration (id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL);
+          INSERT OR IGNORE INTO integration VALUES (1,1);
           CREATE TABLE IF NOT EXISTS outbox (
             event_id TEXT PRIMARY KEY, body TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0);
         """)
@@ -57,8 +59,10 @@ class Provider:
             "SELECT token_id,scope,audience,expires,revoked FROM tokens WHERE hash=?",
             (hashlib.sha256(token.encode()).hexdigest(),),
         ).fetchone()
+        enabled = bool(self.db.execute("SELECT enabled FROM integration WHERE id=1").fetchone()[0])
         valid = bool(
-            row
+            enabled
+            and row
             and row[1] == operation
             and row[2] == "synthetic-saas"
             and timestamp(row[3]) > timestamp(now)
@@ -110,6 +114,12 @@ class Provider:
                 "UPDATE tokens SET revoked=1 WHERE hash=?",
                 (hashlib.sha256(token.encode()).hexdigest(),),
             )
+
+    def set_integration(self, enabled: bool) -> None:
+        if not isinstance(enabled, bool):
+            raise ValueError("explicit boolean integration state required")
+        with self.db:
+            self.db.execute("UPDATE integration SET enabled=? WHERE id=1", (enabled,))
 
     def close(self) -> None:
         self.db.close()

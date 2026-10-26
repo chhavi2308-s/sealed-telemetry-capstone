@@ -47,6 +47,7 @@ def test_cloud_responder_verified_and_idempotent(monkeypatch, status):
     finding = {
         "state": "SUSPICIOUS",
         "approved": True,
+        "disable_integration": True,
         "decision_id": "decision",
         "credential_fingerprint": token["credential_fingerprint"],
         "run_id": "run",
@@ -63,6 +64,11 @@ def test_cloud_responder_verified_and_idempotent(monkeypatch, status):
         assert emit.call_args_list[0].args[0] == emit.call_args_list[1].args[0]
         assert token["access_token"] not in json.dumps(responder(finding, None))
     assert boto3.resource("dynamodb").Table("responses").scan()["Count"] == 1
+    assert (
+        not boto3.resource("dynamodb")
+        .Table("tokens")
+        .get_item(Key={"token_hash": "integration:enabled"})["Item"]["enabled"]
+    )
 
 
 def test_cloud_responder_without_approval():

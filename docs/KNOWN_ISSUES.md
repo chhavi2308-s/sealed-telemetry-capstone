@@ -1,3 +1,20 @@
-# Known issues
+# Known issues and acceptance gaps
 
-No AWS identity, region, budget or deployment approval supplied. Cloud acceptance, IAM negative tests, cost and teardown must be measured after approval. Original Review-1 slides, standalone Codex instructions, team assignments and review date are absent. No existing implementation to preserve. Local simulations cannot validate cross-account isolation or provider realism.
+| ID | Issue | Impact and next action |
+|---|---|---|
+| KI-01 | Account, region, temporary deployment role/profile, owner/expiry, budget cap and retention approval not supplied | Blocks live deployment. Run scripts/preflight.py only with confirmed values; inspect change set before execution |
+| KI-02 | Live AWS security/reliability not exercised | Moto and static policy tests do not prove real role denial, Object Lock enforcement, propagation, retries, costs or teardown. Execute live acceptance in runbook |
+| KI-03 | Single-account Review-2 candidate only | Separate roles are implemented; separate security/workload accounts, cross-account policy and organization guardrails remain a final-profile task requiring ownership approval |
+| KI-04 | CloudWatch app/platform and API access logs exist, but no archive adapter or configured CloudTrail trail/data-event selection | Platform/CloudTrail feeds cannot be claimed as archived IBER evidence. Core detection uses gateway/provider/health evidence. Add selected feeds after coverage/cost review |
+| KI-05 | Operational health is not a completeness attestation | Monitor checks deployment state, queue conditions and pending outbox lag. Coverage gaps and correlated provider/control-plane failures remain uncertain |
+| KI-06 | Provisional deadlines and scale bounds | Benign delivery calibration has not run on AWS. More than 1000 records for one credential fails visibly; active batches need load tests and partitioned scheduling. Long outages may exhaust SQS/stream retention |
+| KI-07 | No rehearsed automated DLQ/expired-stream redrive | Raw outbox/archives remain retained and manual recovery is documented; automate authorized replay and prove it in a fault experiment |
+| KI-08 | Mock OAuth interface is deliberately limited | IAM-authorized JSON client credentials and read/export scopes work. No standards-complete OAuth authorization-code flow or public RFC 7009 revoke endpoint; responder uses scoped internal registry operations |
+| KI-09 | Missing investigator cases HTTP API and dashboard | Read-only SDK incident export and local reports are implemented; GET /v1/cases is a backlog interface, not deployed |
+| KI-10 | Cloud approval gate is operator-driven | EventBridge executions stop at alert-only ApprovalRequired; operator starts a new approved execution. No callback approval UI. A cached unverified response needs investigation/new action ID |
+| KI-11 | Recovery scope | Local token revocation/rotation and integration disable/restore are tested; synthetic data is read-only. Cloud clean-code redeployment and restoration of modified resources have not been rehearsed |
+| KI-12 | Research evidence is a local smoke dataset | Fifteen curated scenarios and virtual event time do not establish held-out effectiveness, a detection SLA, invocation overhead, AWS cost or novelty. Correlated-ID retries remain inconclusive; do not relabel them malicious to inflate recall |
+| KI-13 | Windows long paths | SAM cached dependency paths fail under the original long checkout. Native validation and non-cached build succeed from a hash-verified short source path. Clone/build in a short path or use Linux CI |
+| KI-14 | Remote review not performed | Local commits only; no branch pushed, PR created, teammate signoff, release tag, screenshots/video or final report/poster |
+
+No known failing tests are hidden or skipped. These gaps prevent a final-system completion claim.

@@ -176,12 +176,12 @@ def test_health_staleness(tmp_path):
     ledger.close()
 
 
-def test_one_use_authorization_replay_corroboration():
+def test_reused_authorization_can_be_benign_retry():
     exp = event()
     first = event("provider", "PROVIDER_ACTION", provider_request_id="first")
     replay = replace(first, event_id=str(uuid4()), provider_request_id="second")
     ds = reconcile([exp, first, replay], LATER, HEALTH)
-    assert {d["state"] for d in ds} == {"CORROBORATED_SUSPECTED_ABUSE"}
+    assert {d["state"] for d in ds} == {"INCONCLUSIVE"}
     assert all(d["response_policy"] == "approval_required" for d in ds)
 
 
@@ -205,3 +205,43 @@ def test_containment_recovery_scenario(tmp_path):
     assert result["response"]["status"] == "verified"
     assert result["response"]["recovery"] == "verified"
     assert result["integrity_valid"]
+
+
+def test_integration_disable_and_restore(tmp_path):
+    provider = Provider(tmp_path / "provider.sqlite", secrets.token_bytes(32))
+    token, _ = provider.issue(NOW)
+    assert provider.call(token, NOW, "run", "lab")["status"] == 200
+    provider.set_integration(False)
+    assert provider.call(token, NOW, "run", "lab")["status"] == 403
+    provider.set_integration(True)
+    assert provider.call(token, NOW, "run", "lab")["status"] == 200
+    provider.close()
+
+
+@pytest.mark.parametrize("value", [-1, float("nan"), float("inf"), "15", True])
+def test_invalid_deadline_policy_rejected(value):
+    with pytest.raises(ValueError):
+        Policy(provider_deadline=value)
+
+
+def test_corroboration_requires_independently_verified_revocation():
+    revoked = event(
+        "responder",
+        "RESPONSE_ACTION",
+        operation="token:revoke:verify",
+        invocation_id=None,
+        action_id=None,
+    )
+    obs = event(
+        "provider",
+        "PROVIDER_ACTION",
+        provider_request_id="after-revoke",
+        event_time_utc=LATER,
+        invocation_id=None,
+        action_id=None,
+    )
+    ds = reconcile([revoked, obs], LATER, HEALTH)
+    assert ds[0]["state"] == "CORROBORATED_SUSPECTED_ABUSE"
+    assert set(ds[0]["correlated_event_ids"]) == {revoked.event_id, obs.event_id}
+    close = replace(obs, event_time_utc="2026-10-26T10:00:10+00:00")
+    assert reconcile([revoked, close], LATER, HEALTH)[0]["state"] != "CORROBORATED_SUSPECTED_ABUSE"

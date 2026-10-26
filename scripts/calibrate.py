@@ -19,6 +19,11 @@ def main() -> None:
         "calibration_source": str(args.input),
         "deadlines": calibrate(data, probability=args.quantile, margin=args.margin),
     }
+    result["policy"] = {
+        source + "_deadline": settings["deadline_seconds"]
+        for source, settings in result["deadlines"].items()
+        if source in {"provider", "app", "gateway"}
+    }
     args.output.write_text(json.dumps(result, indent=2) + "\n")
 
 
