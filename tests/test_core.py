@@ -245,3 +245,14 @@ def test_corroboration_requires_independently_verified_revocation():
     assert set(ds[0]["correlated_event_ids"]) == {revoked.event_id, obs.event_id}
     close = replace(obs, event_time_utc="2026-10-26T10:00:10+00:00")
     assert reconcile([revoked, close], LATER, HEALTH)[0]["state"] != "CORROBORATED_SUSPECTED_ABUSE"
+
+
+def test_export_containment_verifies_the_authorized_operation(tmp_path):
+    from unittest.mock import patch
+
+    provider = Provider(tmp_path / "provider.sqlite", secrets.token_bytes(32))
+    token, _ = provider.issue(NOW, scope="records:export")
+    with patch.object(provider, "call", wraps=provider.call) as call:
+        assert contain(provider, token, NOW, "run", "lab", approved=True)["status"] == "verified"
+        assert call.call_args.kwargs["operation"] == "records:export"
+    provider.close()

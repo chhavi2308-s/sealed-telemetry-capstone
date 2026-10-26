@@ -30,7 +30,7 @@ The complete source extracts in docs/specifications are the specification regist
 
 | Ticket | Actual implementation and proof | Status |
 |---|---|---|
-| ENG-01 | pyproject, exact locks, pinned/read-only CI; 59 passing tests, Ruff, strict mypy, SAM validate/build | Local foundation verified; remote CI pending |
+| ENG-01 | pyproject, exact locks, pinned/read-only CI; 63 passing tests, Ruff, strict mypy, SAM validate/build | Local foundation verified; remote CI pending |
 | LAB-01/02 | provider.py and cloud_lab.py; test_provider_security_and_verified_response, test_issuer_and_provider_outbox, stream acknowledgement regression | Local/Moto verified; live provider pending |
 | LAB-03 | cloud_lab.gateway/app, WorkloadApi, issuer and SaaS APIs | Packaged candidate; no deployed 200 response claimed |
 | OBS-01 | JSON app logs, default platform logs and API access-log groups in template | Supplementary archive adapters and configured CloudTrail coverage pending KI-04 |

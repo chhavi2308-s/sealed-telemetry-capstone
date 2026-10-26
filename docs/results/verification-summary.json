@@ -1,9 +1,9 @@
 {
-  "tests": "59",
+  "tests": "63",
   "failures": "0",
   "errors": "0",
   "skipped": "0",
-  "time": "10.141",
+  "time": "15.729",
   "python": "3.12",
   "ruff_check": "passed",
   "ruff_format": "passed",

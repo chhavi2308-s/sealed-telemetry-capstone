@@ -10,9 +10,10 @@ from sealed_telemetry.cloud_lab import issuer
 from sealed_telemetry.cloud_response import responder
 
 
+@pytest.mark.parametrize("scope", ["records:read", "records:export"])
 @pytest.mark.parametrize("status", [200, 403, 500])
 @mock_aws
-def test_cloud_responder_verified_and_idempotent(monkeypatch, status):
+def test_cloud_responder_verified_and_idempotent(monkeypatch, status, scope):
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
     monkeypatch.setenv("TOKEN_TABLE", "tokens")
     monkeypatch.setenv("RESPONSE_TABLE", "responses")
@@ -43,7 +44,7 @@ def test_cloud_responder_verified_and_idempotent(monkeypatch, status):
         KeySchema=[{"AttributeName": "response_id", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "response_id", "AttributeType": "S"}],
     )
-    token = issuer({"operation": "issue"}, None)
+    token = issuer({"operation": "issue", "scope": scope}, None)
     finding = {
         "state": "SUSPICIOUS",
         "approved": True,
@@ -61,6 +62,9 @@ def test_cloud_responder_verified_and_idempotent(monkeypatch, status):
         assert responder(finding, None)["status"] == ("verified" if status == 403 else "unverified")
         assert responder(finding, None)["status"] == ("verified" if status == 403 else "unverified")
         call.assert_called_once()
+        assert call.call_args.args[0].endswith(
+            "/export" if scope == "records:export" else "/records"
+        )
         assert emit.call_args_list[0].args[0] == emit.call_args_list[1].args[0]
         assert token["access_token"] not in json.dumps(responder(finding, None))
     assert boto3.resource("dynamodb").Table("responses").scan()["Count"] == 1

@@ -18,7 +18,7 @@ def contain(
         return {"status": "approval_required", "verified_at": None}
     try:
         provider.revoke(token, fail=inject_failure)
-        result = provider.call(token, now, run_id, scenario_id)
+        result = provider.call(token, now, run_id, scenario_id, operation=provider.scope_for(token))
     except TimeoutError:
         return {"status": "unverified", "verified_at": None, "reason": "provider_timeout"}
     verified = result["status"] == 403

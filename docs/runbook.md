@@ -48,3 +48,5 @@ Use `python scripts/calibrate.py --input benign-delays.json --output calibrated-
 Use `python scripts/export_incident.py --run-id RUN --event-table TABLE --decision-table TABLE --archive-bucket BUCKET --region REGION --output incident.json` with investigator read permissions. Alternatively use `--credential-fingerprint HMAC` instead of run ID to reconstruct across provider-assigned research runs. Export requires DynamoDB index/history reads, S3 GetObjectVersion and evidence-key decrypt; no responder privilege is needed.
 
 On Windows, install SAM tooling and clone/build in a short directory. Long repository paths can exceed dependency extraction limits, especially with cached `.aws-sam/deps` paths. This session validated and built identical source from a short staging directory, with file hashes preserved. No system long-path setting was modified. Linux CI also validates/builds SAM without cloud credentials.
+
+Containment verification uses the credential's authorized operation: read tokens are probed at /records and export tokens at /export. A wrong-scope rejection cannot be used as proof of successful containment.

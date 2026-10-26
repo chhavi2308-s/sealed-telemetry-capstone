@@ -49,8 +49,11 @@ def responder(event: dict[str, Any], context: Any) -> dict[str, Any]:
     )
     if event.get("disable_integration") is True:
         table.put_item(Item={"token_hash": "integration:enabled", "enabled": False})
+    verify_url = os.environ["SAAS_URL"]
+    if row["scope"] == "records:export":
+        verify_url = verify_url.rsplit("/", 1)[0] + "/export"
     verification = https_json(
-        os.environ["SAAS_URL"],
+        verify_url,
         headers={"Authorization": "Bearer " + token, "X-Run-Id": event["run_id"]},
     )
     verified = verification["status"] == 403

@@ -115,6 +115,14 @@ class Provider:
                 (hashlib.sha256(token.encode()).hexdigest(),),
             )
 
+    def scope_for(self, token: str) -> str:
+        row = self.db.execute(
+            "SELECT scope FROM tokens WHERE hash=?", (hashlib.sha256(token.encode()).hexdigest(),)
+        ).fetchone()
+        if row is None:
+            raise ValueError("cannot verify containment for an unknown credential")
+        return str(row[0])
+
     def set_integration(self, enabled: bool) -> None:
         if not isinstance(enabled, bool):
             raise ValueError("explicit boolean integration state required")
