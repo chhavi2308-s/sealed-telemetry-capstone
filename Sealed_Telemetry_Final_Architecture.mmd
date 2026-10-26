@@ -1,0 +1,54 @@
+flowchart TB
+ subgraph LAB["Controlled experiment / ground truth"]
+  RUN[Scenario runner and immutable labels]
+  ATK[Disposable token replay client]
+ end
+ subgraph W["Workload trust boundary - assumed compromised"]
+  CLIENT[Test caller] --> GW[API Gateway]
+  GW --> WL[Workload Lambda]
+  SEC[Secrets Manager test credential] --> WL
+  WL --> INT[Untrusted action intent]
+ end
+ subgraph P["Independent mock OAuth and SaaS provider"]
+  OAUTH[OAuth issuer and revocation API] --> REG[(Token registry)]
+  SAAS[Mock SaaS API with synthetic resources] --> AUD[Provider-owned audit writer]
+  AUD --> OUT[(Durable provider audit/outbox)]
+ end
+ WL -->|authorized API call| SAAS
+ ATK -->|replay disposable token| SAAS
+ RUN --> ATK
+ RUN --> CLIENT
+ subgraph AWSOBS["AWS observability: partial coverage"]
+  LOG[CloudWatch platform/application logs]
+  TRAIL[CloudTrail configured AWS API events]
+  ACCESS[API Gateway ingress logs]
+ end
+ WL -.-> LOG
+ GW -.-> ACCESS
+ subgraph S["Security-controlled boundary"]
+  ING[Authenticated evidence intake API] --> COL[Collector Lambda validation and receipt stamp]
+  COL --> Q[SQS queue and DLQ]
+  Q --> NORM[Normalizer Lambda and deduplication]
+  NORM --> DB[(DynamoDB event and case indexes)]
+  NORM --> ARCH[(S3 versioning / Object Lock evidence)]
+  KMS[AWS KMS restricted keys] -.-> ARCH
+  DB --> REC[IBER reconciler Lambda]
+  CLOCK[Deadline sweeper / EventBridge Scheduler] --> REC
+  HEALTH[Source health, lag, queue alarms] --> REC
+  REC --> DEC[(Append-only decision history)]
+  REC --> BUS[EventBridge findings]
+  BUS --> STEP[Step Functions response policy]
+  STEP --> RESP[Responder Lambda]
+  RESP -->|test revoke / disable| OAUTH
+  DEC --> REP[Forensic reconstruction and report]
+  ARCH --> REP
+ end
+ INT --> ING
+ OUT --> ING
+ LOG -.-> ING
+ TRAIL -.-> ING
+ ACCESS -.-> ING
+ RUN --> MET[Metrics and baseline evaluation]
+ DEC --> MET
+ REP --> MET
+ RESP --> REP
