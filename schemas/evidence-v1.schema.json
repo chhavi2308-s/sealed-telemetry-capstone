@@ -44,7 +44,8 @@
         "responder",
         "platform",
         "cloudtrail",
-        "approval"
+        "approval",
+        "collector"
       ]
     },
     "event_type": {
@@ -365,6 +366,24 @@
           "event_type": {
             "enum": [
               "APPROVAL_DECISION"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source_id": {
+            "const": "collector"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "enum": [
+              "INGEST_REJECTED"
             ]
           }
         }

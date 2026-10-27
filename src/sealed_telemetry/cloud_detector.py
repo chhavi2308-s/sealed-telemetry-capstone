@@ -39,8 +39,10 @@ def detector(event: dict[str, Any], context: Any) -> dict[str, int]:
     if control.get("cursor"):
         scan_args["ExclusiveStartKey"] = control["cursor"]
     next_cursor: dict[str, Any] = {}
+    scanned_pages = 0
     while True:
         scanned = active.scan(**scan_args)
+        scanned_pages += 1
         credentials.extend(
             row["credential_fingerprint"]
             for row in scanned["Items"]
@@ -48,7 +50,7 @@ def detector(event: dict[str, Any], context: Any) -> dict[str, int]:
             and int(row.get("expires_at", 0)) > timestamp(now).timestamp()
         )
         next_cursor = scanned.get("LastEvaluatedKey", {})
-        if not next_cursor or len(credentials) >= 10:
+        if not next_cursor or len(credentials) >= 10 or scanned_pages >= 20:
             break
         scan_args["ExclusiveStartKey"] = next_cursor
     total = 0

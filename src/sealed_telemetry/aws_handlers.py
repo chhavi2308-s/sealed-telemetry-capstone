@@ -6,14 +6,14 @@ import logging
 import os
 from datetime import UTC, datetime
 from typing import Any
-from uuid import NAMESPACE_URL, uuid5
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 from sealed_telemetry.aws_support import SDK_CONFIG
 from sealed_telemetry.reconciliation import Policy
-from sealed_telemetry.schema import Evidence, canonical, digest, timestamp, utcnow
+from sealed_telemetry.schema import Evidence, canonical, digest, new_event, timestamp, utcnow
 
 LOG = logging.getLogger(__name__)
 
@@ -62,12 +62,44 @@ def collector(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return response(403, {"error": "source_forbidden"})
     try:
         body = event.get("body", "")
-        if event.get("isBase64Encoded") or not isinstance(body, str) or len(body) > 16384:
-            return response(413, {"error": "invalid_encoding_or_size"})
+        if event.get("isBase64Encoded") or not isinstance(body, str) or len(body.encode()) > 16384:
+            return rejection(source, principal, body, 413, "invalid_encoding_or_size")
         raw = json.loads(body)
         evidence = Evidence.parse(raw, source)
     except (ValueError, TypeError, AttributeError):
-        return response(400, {"error": "schema_rejected"})
+        return rejection(source, principal, event.get("body"), 400, "schema_rejected")
+    receipt_id = enqueue(evidence, raw, body, principal)
+    return response(202, {"receipt_id": receipt_id, "event_id": evidence.event_id})
+
+
+def rejection(source: str, principal: str, body: Any, status: int, error: str) -> dict[str, Any]:
+    representation = body if isinstance(body, str) else type(body).__name__
+    encoded = representation.encode(errors="backslashreplace")
+    evidence = new_event(
+        "collector",
+        "INGEST_REJECTED",
+        run_id=str(uuid4()),
+        scenario_id="lab-v1",
+        event_time_utc=utcnow(),
+        actor_pseudonym=digest(principal),
+        credential_fingerprint="0" * 64,
+        operation="intake:reject",
+        resource_pseudonym="evidence-intake",
+        trace_context={
+            "submitted_source": source,
+            "error": error,
+            "body_representation_hash": hashlib.sha256(encoded).hexdigest(),
+            "body_representation_bytes": str(len(encoded)),
+            "quarantine": "metadata_only",
+        },
+    )
+    raw = evidence.to_dict()
+    receipt_id = enqueue(evidence, raw, canonical(raw).decode(), os.environ["COLLECTOR_PRINCIPAL"])
+    return response(status, {"error": error, "rejection_receipt_id": receipt_id})
+
+
+def enqueue(evidence: Evidence, raw: dict[str, Any], body: str, principal: str) -> str:
+    source = evidence.source_id
     receipt_id = str(uuid5(NAMESPACE_URL, source + evidence.event_id + digest(raw)))
     envelope = {
         "raw": raw,
@@ -91,7 +123,7 @@ def collector(event: dict[str, Any], context: Any) -> dict[str, Any]:
         QueueUrl=os.environ["QUEUE_URL"], MessageBody=canonical(envelope).decode()
     )
     LOG.info(json.dumps({"event_id": evidence.event_id, "result": "enqueued"}))
-    return response(202, {"receipt_id": receipt_id, "event_id": evidence.event_id})
+    return receipt_id
 
 
 def persist(envelope: dict[str, Any]) -> None:
@@ -230,5 +262,46 @@ def normalizer(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 record["messageId"],
                 type(exc).__name__,
             )
+            if isinstance(
+                exc, (ValueError, KeyError, TypeError, AttributeError)
+            ) and os.environ.get("ARCHIVE_BUCKET"):
+                try:
+                    quarantine(record, type(exc).__name__)
+                except (BotoCoreError, ClientError, ValueError, TypeError) as failure:
+                    LOG.error("quarantine_failed error_type=%s", type(failure).__name__)
             failures.append({"itemIdentifier": record["messageId"]})
     return {"batchItemFailures": failures}
+
+
+def quarantine(record: dict[str, Any], error_type: str) -> None:
+    body = record.get("body", "")
+    encoded = (body if isinstance(body, str) else type(body).__name__).encode(
+        errors="backslashreplace"
+    )
+    metadata = {
+        "message_id": record["messageId"],
+        "queue_arn": record.get("eventSourceARN"),
+        "body_representation_sha256": hashlib.sha256(encoded).hexdigest(),
+        "body_bytes": len(encoded),
+        "error_type": error_type,
+        "first_observed_at": utcnow(),
+        "raw_payload_retained": False,
+    }
+    key = (
+        "quarantine/"
+        + digest(
+            [metadata["queue_arn"], metadata["message_id"], metadata["body_representation_sha256"]]
+        )
+        + ".json"
+    )
+    try:
+        boto3.client("s3", config=SDK_CONFIG).put_object(
+            Bucket=os.environ["ARCHIVE_BUCKET"],
+            Key=key,
+            Body=canonical(metadata),
+            ContentType="application/json",
+            IfNoneMatch="*",
+        )
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] not in {"PreconditionFailed", "412"}:
+            raise

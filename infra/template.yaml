@@ -1255,6 +1255,12 @@
                   }
                 }
               ]
+            },
+            "COLLECTOR_PRINCIPAL": {
+              "Fn::GetAtt": [
+                "CollectorRole",
+                "Arn"
+              ]
             }
           }
         },
@@ -1885,7 +1891,9 @@
               "Enabled": true
             }
           }
-        }
+        },
+        "Timeout": 90,
+        "ReservedConcurrentExecutions": 1
       }
     },
     "DetectorLogs": {
@@ -2063,6 +2071,15 @@
                   "ProviderQueue",
                   "Arn"
                 ]
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "s3:PutObject"
+              ],
+              "Resource": {
+                "Fn::Sub": "${Archive.Arn}/quarantine/*"
               }
             }
           ]
@@ -7258,6 +7275,54 @@
             }
           ]
         }
+      }
+    },
+    "DetectorMissingAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "Namespace": "AWS/Lambda",
+        "MetricName": "Invocations",
+        "Dimensions": [
+          {
+            "Name": "FunctionName",
+            "Value": {
+              "Ref": "DetectorFunction"
+            }
+          }
+        ],
+        "Statistic": "Sum",
+        "Period": 180,
+        "EvaluationPeriods": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "LessThanThreshold",
+        "TreatMissingData": "breaching",
+        "AlarmActions": [
+          {
+            "Ref": "AlarmTopic"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     }
   },

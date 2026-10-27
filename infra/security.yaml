@@ -1242,6 +1242,12 @@
                   }
                 }
               ]
+            },
+            "COLLECTOR_PRINCIPAL": {
+              "Fn::GetAtt": [
+                "CollectorRole",
+                "Arn"
+              ]
             }
           }
         },
@@ -1809,7 +1815,9 @@
               "Enabled": true
             }
           }
-        }
+        },
+        "Timeout": 90,
+        "ReservedConcurrentExecutions": 1
       }
     },
     "DetectorLogs": {
@@ -1987,6 +1995,15 @@
                   "ProviderQueue",
                   "Arn"
                 ]
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "s3:PutObject"
+              ],
+              "Resource": {
+                "Fn::Sub": "${Archive.Arn}/quarantine/*"
               }
             }
           ]
@@ -7018,6 +7035,54 @@
         "DashboardBody": {
           "Fn::Sub": "{\"widgets\": [{\"type\": \"metric\", \"x\": 0, \"y\": 0, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Evidence backlog\", \"metrics\": [[\"AWS/SQS\", \"ApproximateAgeOfOldestMessage\", \"QueueName\", \"${EvidenceQueue.QueueName}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Maximum\", \"view\": \"timeSeries\"}}, {\"type\": \"metric\", \"x\": 12, \"y\": 0, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Provider backlog\", \"metrics\": [[\"AWS/SQS\", \"ApproximateAgeOfOldestMessage\", \"QueueName\", \"${ProviderQueue.QueueName}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Maximum\", \"view\": \"timeSeries\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 6, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Collector errors\", \"metrics\": [[\"AWS/Lambda\", \"Errors\", \"FunctionName\", \"${CollectorFunction}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"view\": \"timeSeries\"}}, {\"type\": \"metric\", \"x\": 12, \"y\": 6, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Normalizer errors\", \"metrics\": [[\"AWS/Lambda\", \"Errors\", \"FunctionName\", \"${NormalizerFunction}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"view\": \"timeSeries\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 12, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Provider forwarding errors\", \"metrics\": [[\"AWS/Lambda\", \"Errors\", \"FunctionName\", \"${AuditForwarderFunction}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"view\": \"timeSeries\"}}, {\"type\": \"metric\", \"x\": 12, \"y\": 12, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Response failures\", \"metrics\": [[\"AWS/States\", \"ExecutionsFailed\", \"StateMachineArn\", \"${ResponseWorkflow}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"view\": \"timeSeries\"}}]}"
         }
+      }
+    },
+    "DetectorMissingAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "Namespace": "AWS/Lambda",
+        "MetricName": "Invocations",
+        "Dimensions": [
+          {
+            "Name": "FunctionName",
+            "Value": {
+              "Ref": "DetectorFunction"
+            }
+          }
+        ],
+        "Statistic": "Sum",
+        "Period": 180,
+        "EvaluationPeriods": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "LessThanThreshold",
+        "TreatMissingData": "breaching",
+        "AlarmActions": [
+          {
+            "Ref": "AlarmTopic"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     }
   },

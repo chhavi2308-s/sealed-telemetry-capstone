@@ -61,7 +61,10 @@ def reconcile(
             for exp in candidates[obs.event_id]
             if exp.event_id not in exact_owners or obs.event_id in exact_owners[exp.event_id]
         ]
-    uses = {e.event_id: sum(e in group for group in candidates.values()) for e in expected}
+    uses = {e.event_id: 0 for e in expected}
+    for group in candidates.values():
+        for expectation in group:
+            uses[expectation.event_id] += 1
     covered: set[str] = set()
 
     def decide(

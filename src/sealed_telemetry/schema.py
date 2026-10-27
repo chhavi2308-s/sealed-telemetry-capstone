@@ -18,6 +18,7 @@ SOURCE_TYPES = {
     "platform": {"LAMBDA_PLATFORM", "API_INGRESS"},
     "cloudtrail": {"AWS_API"},
     "approval": {"APPROVAL_DECISION"},
+    "collector": {"INGEST_REJECTED"},
 }
 
 

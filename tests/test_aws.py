@@ -16,6 +16,7 @@ def aws(monkeypatch):
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
     monkeypatch.setenv("ARCHIVE_BUCKET", "sealed-lab-evidence-test")
     monkeypatch.setenv("EVENT_TABLE", "evidence")
+    monkeypatch.setenv("COLLECTOR_PRINCIPAL", "arn:aws:iam::123456789012:role/collector")
     monkeypatch.setenv(
         "SOURCE_ROLES", json.dumps({"gateway": "arn:aws:iam::123456789012:role/gateway"})
     )
@@ -152,3 +153,66 @@ def test_index_failure_recovers_from_existing_archive(aws):
             persist(data)
     persist(data)
     assert boto3.resource("dynamodb").Table("evidence").scan()["Count"] == 1
+
+
+def test_invalid_intake_quarantines_metadata_without_raw_payload(aws):
+    import os
+
+    invalid_payload = "Bearer disposable-secret-must-not-be-archived"
+    result = collector(
+        {
+            "requestContext": {
+                "identity": {"userArn": "arn:aws:sts::123456789012:assumed-role/gateway/session"}
+            },
+            "body": invalid_payload,
+        },
+        None,
+    )
+    assert result["statusCode"] == 400
+    message = boto3.client("sqs").receive_message(QueueUrl=os.environ["QUEUE_URL"])["Messages"][0]
+    assert invalid_payload not in message["Body"]
+    value = json.loads(message["Body"])
+    assert value["raw"]["event_type"] == "INGEST_REJECTED"
+    assert value["receipt"]["authenticated_principal"].endswith("role/collector")
+    assert (
+        normalizer(
+            {
+                "Records": [
+                    {
+                        "messageId": "rejected",
+                        "body": message["Body"],
+                        "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:intake",
+                    }
+                ]
+            },
+            None,
+        )["batchItemFailures"]
+        == []
+    )
+
+
+def test_poison_queue_metadata_is_archived_once_and_does_not_copy_body(aws):
+    body = "invalid-json Bearer disposable-secret"
+    request = {
+        "Records": [
+            {
+                "messageId": "poison",
+                "body": body,
+                "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:intake",
+            }
+        ]
+    }
+    assert normalizer(request, None)["batchItemFailures"]
+    assert normalizer(request, None)["batchItemFailures"]
+    client = boto3.client("s3")
+    versions = client.list_object_versions(Bucket="sealed-lab-evidence-test", Prefix="quarantine/")[
+        "Versions"
+    ]
+    assert len(versions) == 1
+    stored = (
+        client.get_object(Bucket="sealed-lab-evidence-test", Key=versions[0]["Key"])["Body"]
+        .read()
+        .decode()
+    )
+    assert body not in stored and "disposable-secret" not in stored
+    assert json.loads(stored)["raw_payload_retained"] is False
