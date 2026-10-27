@@ -54,6 +54,18 @@ def test_issuer_and_provider_outbox(monkeypatch):
         .get_item(Key={"event_id": rows[0]["event_id"]})["Item"]
     )
     assert "pending_partition" not in delivered and "delivered_at" in delivered
+    revoke = {
+        "requestContext": {},
+        "path": "/oauth/revoke",
+        "body": json.dumps({"token": token["access_token"]}),
+    }
+    assert issuer(revoke, None)["statusCode"] == 200
+    assert issuer(revoke, None)["statusCode"] == 200
+    rejected = saas(request, None)
+    assert rejected["statusCode"] == 403
+    assert json.loads(rejected["body"])["reason"] == "revoked"
+    assert rejected["headers"]["Cache-Control"] == "no-store"
+    assert token["access_token"] not in rejected["body"]
 
 
 def test_gateway_suppression_is_explicit_lab_setting(monkeypatch):
@@ -107,3 +119,46 @@ def test_app_suppression_preserves_provider_call(monkeypatch):
         )
         emit.assert_not_called()
         call.assert_called_once()
+
+
+def test_workload_permission_probe_is_fail_closed(monkeypatch):
+    from unittest.mock import MagicMock
+
+    import pytest
+    from botocore.exceptions import ClientError
+
+    monkeypatch.setenv("LAB_EXPOSURE_ENABLED", "false")
+    with pytest.raises(ValueError, match="disabled"):
+        app({"operation": "permission_probe"}, None)
+    monkeypatch.setenv("LAB_EXPOSURE_ENABLED", "true")
+    client = MagicMock()
+    denied = ClientError({"Error": {"Code": "AccessDenied"}}, "SyntheticProbe")
+    for method in ["put_object", "delete_object", "put_item", "send_message"]:
+        getattr(client, method).side_effect = denied
+    client.get_caller_identity.return_value = {
+        "Arn": "arn:aws:sts::123456789012:assumed-role/app/session"
+    }
+    with patch("sealed_telemetry.cloud_lab.boto3.client", return_value=client):
+        result = app(
+            {
+                "operation": "permission_probe",
+                "archive_bucket": "archive",
+                "event_table": "events",
+                "provider_queue_url": "queue",
+            },
+            None,
+        )
+        assert result["passed"]
+        client.put_object.side_effect = None
+        result = app(
+            {
+                "operation": "permission_probe",
+                "archive_bucket": "archive",
+                "event_table": "events",
+                "provider_queue_url": "queue",
+            },
+            None,
+        )
+        assert not result["passed"]
+        assert result["results"]["archive_put"] == "UNEXPECTED_ALLOW"
+        assert client.delete_object.call_args.kwargs["Key"].endswith("-absent")

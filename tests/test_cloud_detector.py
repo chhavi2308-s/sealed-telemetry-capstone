@@ -103,3 +103,46 @@ def test_cloud_decision_transaction_and_revisions(monkeypatch):
     current = next(r for r in rows if r["decision_id"] == "CURRENT")
     assert current["revision"] == 3
     assert json.loads(current["body"])["state"] == "CONSISTENT"
+
+
+def test_capacity_overflow_does_not_starve_other_credentials(monkeypatch):
+    from unittest.mock import MagicMock, patch
+
+    from sealed_telemetry.schema import utcnow
+
+    monkeypatch.setenv("EVENT_TABLE", "events")
+    monkeypatch.setenv("DECISION_TABLE", "decisions")
+    monkeypatch.setenv("ACTIVE_TABLE", "active")
+    monkeypatch.setenv("HEALTH_TABLE", "health")
+    tables = {n: MagicMock() for n in ["events", "decisions", "active", "health"]}
+    tables["active"].get_item.return_value = {}
+    tables["active"].scan.return_value = {
+        "Items": [
+            {"credential_fingerprint": fp, "expires_at": int(timestamp(utcnow()).timestamp()) + 900}
+            for fp in ["a" * 64, "b" * 64]
+        ]
+    }
+    tables["health"].get_item.return_value = {}
+    tables["decisions"].get_item.return_value = {}
+    e = event("provider", "PROVIDER_ACTION", provider_request_id="request")
+    envelope = {
+        "raw": e.to_dict(),
+        "receipt": {"authenticated_source": "provider", "canonical_hash": digest(e.to_dict())},
+    }
+    tables["events"].query.side_effect = [
+        {"Items": [{"record": canonical(envelope).decode()}] * 1001},
+        {"Items": []},
+    ]
+    resource = MagicMock()
+    resource.Table.side_effect = lambda name: tables[name]
+    with (
+        patch("sealed_telemetry.cloud_detector.boto3.resource", return_value=resource),
+        patch("sealed_telemetry.cloud_detector.boto3.client") as client,
+    ):
+        result = detector({}, None)
+        assert result["credential_groups"] == 2
+        writes = client.return_value.transact_write_items.call_args.kwargs["TransactItems"]
+        body = json.loads(writes[1]["Put"]["Item"]["body"]["S"])
+        assert body["state"] == "INCONCLUSIVE"
+        assert body["reason_codes"] == ["EVIDENCE_CAPACITY_EXCEEDED"]
+        assert tables["events"].query.call_count == 2

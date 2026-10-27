@@ -31,9 +31,13 @@ class Ledger:
         event = Evidence.parse(raw, source)
         raw_hash = digest(raw)
         with self.db:
-            old = self.db.execute(
-                "SELECT receipt FROM evidence WHERE event_id=?", (event.event_id,)
-            ).fetchone()
+            storage_id = source + ":" + event.event_id
+            previous = self.db.execute(
+                "SELECT receipt FROM evidence WHERE event_id IN (?,?)", (storage_id, event.event_id)
+            ).fetchall()
+            old = next(
+                (r for r in previous if json.loads(r[0])["authenticated_source"] == source), None
+            )
             if old:
                 receipt = json.loads(old[0])
                 if receipt["canonical_hash"] != raw_hash:
@@ -50,7 +54,7 @@ class Ledger:
             self.db.execute(
                 "INSERT INTO evidence VALUES (?,?,?,?)",
                 (
-                    event.event_id,
+                    storage_id,
                     event.run_id,
                     canonical(raw).decode(),
                     canonical(receipt).decode(),

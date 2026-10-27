@@ -50,3 +50,15 @@ def test_cross_account_profiles_preserve_security_boundary():
         assert not any(a.startswith(("sts:", "s3:", "dynamodb:", "kms:")) for a in actions)
     deny = security["Resources"]["ArchivePolicy"]["Properties"]["PolicyDocument"]["Statement"][1]
     assert deny["Effect"] == "Deny" and "aws:PrincipalArn" in deny["Condition"]["ArnEquals"]
+
+
+def test_generated_profiles_are_current():
+    import runpy
+
+    root = Path(__file__).resolve().parents[1]
+    generator = runpy.run_path(str(root / "scripts/generate_profiles.py"))
+    expected = generator["profiles"](
+        json.loads((root / "infra/template.yaml").read_text(encoding="utf-8"))
+    )
+    for name, value in zip(["security", "workload"], expected, strict=True):
+        assert json.loads((root / f"infra/{name}.yaml").read_text(encoding="utf-8")) == value

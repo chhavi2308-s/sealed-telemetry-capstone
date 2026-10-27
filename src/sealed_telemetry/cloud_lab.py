@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import secrets
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 from urllib.error import HTTPError
@@ -109,6 +110,22 @@ def issuer(event: dict[str, Any], context: Any) -> dict[str, Any]:
         request = parse_body(event) if is_http else event
     except ValueError:
         return response(400, {"error": "invalid_request"})
+    if is_http and event.get("path", "").endswith("/oauth/revoke"):
+        token = request.get("token")
+        if not isinstance(token, str) or not 16 <= len(token) <= 256:
+            return response(400, {"error": "invalid_request"})
+        table = boto3.resource("dynamodb", config=SDK_CONFIG).Table(os.environ["TOKEN_TABLE"])
+        key = {"token_hash": hashlib.sha256(token.encode()).hexdigest()}
+        row = table.get_item(Key=key, ConsistentRead=True).get("Item")
+        if row:
+            table.update_item(
+                Key=key,
+                UpdateExpression="SET revoked=:yes",
+                ExpressionAttributeValues={":yes": True},
+                ConditionExpression="attribute_exists(token_hash)",
+            )
+        # Revocation acceptance is idempotent and does not disclose token existence.
+        return response(200, {"status": "accepted", "verified": False})
     if is_http and request.get("grant_type") != "client_credentials":
         return response(400, {"error": "unsupported_grant_type"})
     if not is_http and request.get("operation") != "issue":
@@ -290,6 +307,10 @@ def gateway(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
 
 def app(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    if event.get("operation") == "permission_probe":
+        if os.environ.get("LAB_EXPOSURE_ENABLED") != "true":
+            raise ValueError("disposable lab acceptance probe disabled")
+        return permission_probe(event)
     fields = event["fields"]
     if not event.get("suppress_log"):
         intent = new_event("app", "INTENT_CREATED", **fields)
@@ -307,4 +328,56 @@ def app(event: dict[str, Any], context: Any) -> dict[str, Any]:
     return {
         "status": result["status"],
         "provider_request_id": result["body"].get("provider_request_id"),
+    }
+
+
+def permission_probe(event: dict[str, Any]) -> dict[str, Any]:
+    """Run only in an approved lab: canaries never address existing evidence or grant access."""
+    from botocore.exceptions import ClientError
+
+    marker = "acceptance-canary/" + str(uuid4())
+    s3 = boto3.client("s3", config=SDK_CONFIG)
+    ddb = boto3.client("dynamodb", config=SDK_CONFIG)
+    sqs = boto3.client("sqs", config=SDK_CONFIG)
+    checks: dict[str, Callable[[], Any]] = {
+        "archive_put": lambda: s3.put_object(
+            Bucket=event["archive_bucket"], Key=marker, Body=b"synthetic-acceptance-canary"
+        ),
+        # A separate nonexistent key avoids deleting even a newly created canary.
+        "archive_delete": lambda: s3.delete_object(
+            Bucket=event["archive_bucket"], Key=marker + "-absent"
+        ),
+        "index_write": lambda: ddb.put_item(
+            TableName=event["event_table"],
+            Item={"event_id": {"S": marker}, "canary": {"BOOL": True}},
+        ),
+        "provider_queue_send": lambda: sqs.send_message(
+            QueueUrl=event["provider_queue_url"],
+            MessageBody=canonical({"acceptance_canary": marker}).decode(),
+        ),
+    }
+    results = {}
+    for name, call in checks.items():
+        try:
+            call()
+            results[name] = "UNEXPECTED_ALLOW"
+        except ClientError as exc:
+            code = exc.response["Error"]["Code"]
+            results[name] = (
+                "DENIED"
+                if code
+                in {
+                    "AccessDenied",
+                    "AccessDeniedException",
+                    "AuthorizationError",
+                    "KMS.AccessDeniedException",
+                }
+                else "UNVERIFIED:" + code
+            )
+    return {
+        "results": results,
+        "passed": all(v == "DENIED" for v in results.values()),
+        "canary_prefix": marker,
+        "cleanup_performed": False,
+        "principal": boto3.client("sts", config=SDK_CONFIG).get_caller_identity()["Arn"],
     }

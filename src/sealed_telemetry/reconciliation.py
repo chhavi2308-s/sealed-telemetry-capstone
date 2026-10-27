@@ -88,6 +88,9 @@ def reconcile(
                 "decided_at": now,
                 "first_observed_at": anchor.event_time_utc,
                 "correlated_event_ids": sorted({e.event_id for e in evidence}),
+                "correlated_evidence_refs": sorted(
+                    {e.source_id + ":" + e.event_id for e in evidence}
+                ),
                 "missing_expected_sources": missing,
                 "source_health_snapshot": health,
                 "confidence_category": confidence,

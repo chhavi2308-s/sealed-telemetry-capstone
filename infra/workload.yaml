@@ -38,6 +38,14 @@
       ],
       "Description": "Enable source subscriptions and chargeable selected CloudTrail data events after approval"
     },
+    "LabExposureEnabled": {
+      "Type": "String",
+      "Default": "false",
+      "AllowedValues": [
+        "true",
+        "false"
+      ]
+    },
     "SecurityAccountId": {
       "Type": "String",
       "AllowedPattern": "[0-9]{12}"
@@ -90,6 +98,9 @@
             },
             "SAAS_URL": {
               "Ref": "SaasRecordsUrl"
+            },
+            "LAB_EXPOSURE_ENABLED": {
+              "Ref": "LabExposureEnabled"
             }
           }
         },

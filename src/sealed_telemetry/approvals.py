@@ -78,9 +78,12 @@ def broker(event: dict[str, Any], context: Any) -> dict[str, str]:
     return {"approval_id": approval_id}
 
 
-def authorized(event: dict[str, Any]) -> str:
+def authorized(event: dict[str, Any], read_only: bool = False) -> str:
     principal = event.get("requestContext", {}).get("identity", {}).get("userArn")
-    source_for_principal(principal, {"operator": os.environ.get("OPERATOR_PRINCIPAL", "")})
+    roles = [os.environ.get("OPERATOR_PRINCIPAL", "")]
+    if read_only:
+        roles.append(os.environ.get("INVESTIGATOR_PRINCIPAL", ""))
+    source_for_principal(principal, {"operator": roles})
     return str(principal)
 
 
@@ -167,7 +170,7 @@ def api(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 UpdateExpression=(
                     "SET #s=:claimed, approved=:approved, approved_by=:actor, "
                     "request_hash=:hash, authorized_until=:until, "
-                    "evidence=:evidence, action_fields=:action"
+                    "evidence=:evidence, action_fields=:action, expires_at=:expiry"
                 ),
                 ConditionExpression="#s=:pending",
                 ExpressionAttributeNames={"#s": "status"},
@@ -178,6 +181,7 @@ def api(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     ":actor": principal,
                     ":hash": request_hash,
                     ":until": int(timestamp(now).timestamp()) + 900,
+                    ":expiry": int(timestamp(now).timestamp()) + 86400,
                     ":evidence": canonical(evidence.to_dict()).decode(),
                     ":action": action,
                 },
@@ -247,7 +251,7 @@ def api(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
 def cases(event: dict[str, Any], context: Any) -> dict[str, Any]:
     try:
-        authorized(event)
+        authorized(event, read_only=True)
     except (ValueError, KeyError, TypeError):
         return response(403, {"error": "operator_forbidden"})
     case_id = (event.get("pathParameters") or {}).get("case_id", "")

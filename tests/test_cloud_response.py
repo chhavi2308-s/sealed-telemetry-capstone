@@ -12,10 +12,11 @@ from sealed_telemetry.cloud_response import responder
 from sealed_telemetry.schema import digest, timestamp, utcnow
 
 
+@pytest.mark.parametrize("reason", ["revoked", "gateway_forbidden"])
 @pytest.mark.parametrize("scope", ["records:read", "records:export"])
 @pytest.mark.parametrize("status", [200, 403, 500])
 @mock_aws
-def test_cloud_responder_verified_and_idempotent(monkeypatch, status, scope):
+def test_cloud_responder_verified_and_idempotent(monkeypatch, status, scope, reason):
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
     monkeypatch.setenv("TOKEN_TABLE", "tokens")
     monkeypatch.setenv("RESPONSE_TABLE", "responses")
@@ -88,15 +89,19 @@ def test_cloud_responder_verified_and_idempotent(monkeypatch, status, scope):
                 "status": status,
                 "body": {
                     "error": "invalid_token",
-                    "reason": "revoked",
+                    "reason": reason,
                     "provider_request_id": "provider-1",
                 },
             },
         ) as call,
         patch("sealed_telemetry.cloud_response.emit") as emit,
     ):
-        assert responder(finding, None)["status"] == ("verified" if status == 403 else "unverified")
-        assert responder(finding, None)["status"] == ("verified" if status == 403 else "unverified")
+        assert responder(finding, None)["status"] == (
+            "verified" if status == 403 and reason == "revoked" else "unverified"
+        )
+        assert responder(finding, None)["status"] == (
+            "verified" if status == 403 and reason == "revoked" else "unverified"
+        )
         assert call.call_count == (2 if status == 500 else 1)
         assert call.call_args.args[0].endswith(
             "/export" if scope == "records:export" else "/records"

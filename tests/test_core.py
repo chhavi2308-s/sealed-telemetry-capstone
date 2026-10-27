@@ -256,3 +256,23 @@ def test_export_containment_verifies_the_authorized_operation(tmp_path):
         assert contain(provider, token, NOW, "run", "lab", approved=True)["status"] == "verified"
         assert call.call_args.kwargs["operation"] == "records:export"
     provider.close()
+
+
+def test_source_namespaced_local_ids_do_not_allow_app_to_block_provider(tmp_path):
+    from dataclasses import replace
+
+    from sealed_telemetry.storage import Ledger
+
+    ledger = Ledger(tmp_path / "ledger.sqlite")
+    try:
+        app_claim = event("app", "INTENT_CREATED")
+        observed = replace(
+            event("provider", "PROVIDER_ACTION", provider_request_id="provider"),
+            event_id=app_claim.event_id,
+        )
+        ledger.ingest(app_claim.to_dict(), "app")
+        ledger.ingest(observed.to_dict(), "provider")
+        assert len(ledger.events(app_claim.run_id)) == 2
+        assert ledger.verify(app_claim.run_id)
+    finally:
+        ledger.close()

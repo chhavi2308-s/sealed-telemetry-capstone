@@ -36,13 +36,18 @@
       "Default": "",
       "Description": "Exact IAM operator role ARN; empty disables operator access"
     },
+    "InvestigatorPrincipalArn": {
+      "Type": "String",
+      "Default": "",
+      "Description": "Optional exact IAM read-only investigation role ARN; no response approval authority"
+    },
     "WorkloadAccountId": {
       "Type": "String",
       "AllowedPattern": "[0-9]{12}"
     },
     "WorkloadStackName": {
       "Type": "String",
-      "AllowedPattern": "[a-zA-Z][a-zA-Z0-9-]{0,63}"
+      "AllowedPattern": "[a-zA-Z][a-zA-Z0-9-]{0,39}"
     }
   },
   "Globals": {
@@ -1462,6 +1467,16 @@
               "Path": "/oauth/token",
               "Method": "post"
             }
+          },
+          "Revoke": {
+            "Type": "Api",
+            "Properties": {
+              "RestApiId": {
+                "Ref": "WorkloadApi"
+              },
+              "Path": "/oauth/revoke",
+              "Method": "post"
+            }
           }
         }
       }
@@ -1974,7 +1989,9 @@
             {
               "Effect": "Allow",
               "Action": [
-                "dynamodb:PutItem"
+                "dynamodb:PutItem",
+                "dynamodb:GetItem",
+                "dynamodb:UpdateItem"
               ],
               "Resource": {
                 "Fn::GetAtt": [
@@ -2992,6 +3009,11 @@
                   "CredentialKey",
                   "Arn"
                 ]
+              },
+              "Condition": {
+                "StringEquals": {
+                  "kms:EncryptionContext:purpose": "sealed-lab-token"
+                }
               }
             },
             {
@@ -3477,6 +3499,25 @@
                 }
               ]
             },
+            "MONITORED_QUEUES": {
+              "Fn::Sub": [
+                "[{\"source\":\"provider\",\"url\":\"${Q}\",\"dlq\":\"${D}\",\"name\":\"${N}\"}]",
+                {
+                  "Q": {
+                    "Ref": "ProviderQueue"
+                  },
+                  "D": {
+                    "Ref": "ProviderDLQ"
+                  },
+                  "N": {
+                    "Fn::GetAtt": [
+                      "ProviderQueue",
+                      "QueueName"
+                    ]
+                  }
+                }
+              ]
+            },
             "WORKLOAD_OBSERVATION_ROLE": {
               "Fn::Sub": "arn:${AWS::Partition}:iam::${WorkloadAccountId}:role/${WorkloadStackName}-observation"
             }
@@ -3618,6 +3659,26 @@
               "Resource": {
                 "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${IntakeApi}/lab/POST/evidence"
               }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:GetQueueAttributes"
+              ],
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "ProviderQueue",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "ProviderDLQ",
+                    "Arn"
+                  ]
+                }
+              ]
             },
             {
               "Effect": "Allow",
@@ -6266,6 +6327,9 @@
             },
             "OPERATOR_PRINCIPAL": {
               "Ref": "OperatorPrincipalArn"
+            },
+            "INVESTIGATOR_PRINCIPAL": {
+              "Ref": "InvestigatorPrincipalArn"
             }
           }
         },
@@ -6703,6 +6767,213 @@
           ]
         }
       }
+    },
+    "ReporterRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
+      }
+    },
+    "ReporterLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${ReporterFunction}"
+        },
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
+      }
+    },
+    "ReporterFunction": {
+      "Type": "AWS::Serverless::Function",
+      "Properties": {
+        "CodeUri": "../src",
+        "Handler": "sealed_telemetry.cloud_reporting.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "ReporterRole",
+            "Arn"
+          ]
+        },
+        "Timeout": 90,
+        "MemorySize": 256,
+        "Environment": {
+          "Variables": {
+            "OPERATOR_PRINCIPAL": {
+              "Ref": "OperatorPrincipalArn"
+            },
+            "ARCHIVE_BUCKET": {
+              "Ref": "Archive"
+            },
+            "EVENT_TABLE": {
+              "Ref": "Events"
+            },
+            "DECISION_TABLE": {
+              "Ref": "Decisions"
+            },
+            "INVESTIGATOR_PRINCIPAL": {
+              "Ref": "InvestigatorPrincipalArn"
+            }
+          }
+        },
+        "Events": {
+          "Report": {
+            "Type": "Api",
+            "Properties": {
+              "RestApiId": {
+                "Ref": "OperatorApi"
+              },
+              "Path": "/v1/reports",
+              "Method": "post"
+            }
+          }
+        }
+      }
+    },
+    "ReporterPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "VersionPinnedForensics",
+        "Roles": [
+          {
+            "Ref": "ReporterRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:Query"
+              ],
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "Decisions",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${Events.Arn}/index/RunIndex"
+                },
+                {
+                  "Fn::Sub": "${Events.Arn}/index/CredentialIndex"
+                }
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObjectVersion"
+              ],
+              "Resource": {
+                "Fn::Sub": "${Archive.Arn}/evidence/*"
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "s3:PutObject"
+              ],
+              "Resource": {
+                "Fn::Sub": "${Archive.Arn}/reports/*"
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "kms:Decrypt",
+                "kms:GenerateDataKey"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "EvidenceKey",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "ReporterLogs",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "OperationsDashboard": {
+      "Type": "AWS::CloudWatch::Dashboard",
+      "Properties": {
+        "DashboardName": {
+          "Fn::Sub": "${AWS::StackName}-operations"
+        },
+        "DashboardBody": {
+          "Fn::Sub": "{\"widgets\": [{\"type\": \"metric\", \"x\": 0, \"y\": 0, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Evidence backlog\", \"metrics\": [[\"AWS/SQS\", \"ApproximateAgeOfOldestMessage\", \"QueueName\", \"${EvidenceQueue.QueueName}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Maximum\", \"view\": \"timeSeries\"}}, {\"type\": \"metric\", \"x\": 12, \"y\": 0, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Provider backlog\", \"metrics\": [[\"AWS/SQS\", \"ApproximateAgeOfOldestMessage\", \"QueueName\", \"${ProviderQueue.QueueName}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Maximum\", \"view\": \"timeSeries\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 6, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Collector errors\", \"metrics\": [[\"AWS/Lambda\", \"Errors\", \"FunctionName\", \"${CollectorFunction}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"view\": \"timeSeries\"}}, {\"type\": \"metric\", \"x\": 12, \"y\": 6, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Normalizer errors\", \"metrics\": [[\"AWS/Lambda\", \"Errors\", \"FunctionName\", \"${NormalizerFunction}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"view\": \"timeSeries\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 12, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Provider forwarding errors\", \"metrics\": [[\"AWS/Lambda\", \"Errors\", \"FunctionName\", \"${AuditForwarderFunction}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"view\": \"timeSeries\"}}, {\"type\": \"metric\", \"x\": 12, \"y\": 12, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Response failures\", \"metrics\": [[\"AWS/States\", \"ExecutionsFailed\", \"StateMachineArn\", \"${ResponseWorkflow}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"view\": \"timeSeries\"}}]}"
+        }
+      }
     }
   },
   "Outputs": {
@@ -6759,6 +7030,11 @@
     "OperatorApiUrl": {
       "Value": {
         "Fn::Sub": "https://${OperatorApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/lab"
+      }
+    },
+    "ProviderQueueUrl": {
+      "Value": {
+        "Ref": "ProviderQueue"
       }
     },
     "WorkloadIntakeArn": {

@@ -21,7 +21,7 @@ def profiles(template: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     parameters["WorkloadAccountId"] = {"Type": "String", "AllowedPattern": "[0-9]{12}"}
     parameters["WorkloadStackName"] = {
         "Type": "String",
-        "AllowedPattern": "[a-zA-Z][a-zA-Z0-9-]{0,63}",
+        "AllowedPattern": "[a-zA-Z][a-zA-Z0-9-]{0,39}",
     }
     app_arn = sub(
         "arn:${AWS::Partition}:lambda:${AWS::Region}:${WorkloadAccountId}:function:${WorkloadStackName}-app"
@@ -137,7 +137,7 @@ def profiles(template: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     )
     workload["Parameters"] = {
         k: copy.deepcopy(template["Parameters"][k])
-        for k in ["Owner", "ExpiresOn", "EnableSupplementary"]
+        for k in ["Owner", "ExpiresOn", "EnableSupplementary", "LabExposureEnabled"]
     }
     workload["Parameters"].update(
         {
@@ -161,6 +161,7 @@ def profiles(template: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     wr["AppFunction"]["Properties"]["Environment"]["Variables"] = {
         "INTAKE_URL": ref("IntakeUrl"),
         "SAAS_URL": ref("SaasRecordsUrl"),
+        "LAB_EXPOSURE_ENABLED": ref("LabExposureEnabled"),
     }
     wr["AppPolicy"]["Properties"]["PolicyDocument"]["Statement"][0]["Resource"] = ref("IntakeArn")
     wr["GatewayInvokePermission"] = {

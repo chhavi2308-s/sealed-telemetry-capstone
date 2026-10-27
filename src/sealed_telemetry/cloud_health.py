@@ -55,6 +55,21 @@ def monitor(event: dict[str, Any], context: Any) -> dict[str, str]:
     )["Datapoints"]
     if age and max(point["Maximum"] for point in age) > 120:
         health["collector"] = "unhealthy"
+    for queue in json.loads(os.environ.get("MONITORED_QUEUES", "[]")):
+        dead = sqs.get_queue_attributes(
+            QueueUrl=queue["dlq"], AttributeNames=["ApproximateNumberOfMessages"]
+        )["Attributes"]
+        lag = boto3.client("cloudwatch", config=SDK_CONFIG).get_metric_statistics(
+            Namespace="AWS/SQS",
+            MetricName="ApproximateAgeOfOldestMessage",
+            Dimensions=[{"Name": "QueueName", "Value": queue["name"]}],
+            StartTime=timestamp(now) - timedelta(minutes=5),
+            EndTime=timestamp(now),
+            Period=60,
+            Statistics=["Maximum"],
+        )["Datapoints"]
+        if int(dead["ApproximateNumberOfMessages"]) or any(p["Maximum"] > 120 for p in lag):
+            health[queue["source"]] = "unhealthy"
     pending = (
         boto3.resource("dynamodb", config=SDK_CONFIG)
         .Table(os.environ["OUTBOX_TABLE"])

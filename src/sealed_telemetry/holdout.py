@@ -120,11 +120,13 @@ def run(directory: Path, seeds: list[int], trials: int) -> dict[str, Any]:
     directory.mkdir(parents=True, exist_ok=False)
     policy = Policy()
     protocol = {
-        "version": "parameter-holdout-v1",
+        "version": "parameter-holdout-v2",
         "seeds": seeds,
         "trials": trials,
         "cases": CASES,
         "policy": asdict(policy),
+        "classification": ("Any alert in 150 seconds counts, including later-revised alerts"),
+        "poll_interval_seconds": 5,
         "generator_hash": digest(Path(__file__).read_text(encoding="utf-8")),
         "limitations": (
             "Post-development synthetic parameter holdout; not blind external validation. "
@@ -142,7 +144,7 @@ def run(directory: Path, seeds: list[int], trials: int) -> dict[str, Any]:
             for trial in range(trials):
                 arrivals, label = generate(rng, case)
                 visible = {}
-                first_detection = None
+                first_detection: dict[str, int] = {}
                 report: dict[str, Any] = {}
                 health = {
                     s: case != "collector-outage"
@@ -168,9 +170,9 @@ def run(directory: Path, seeds: list[int], trials: int) -> dict[str, Any]:
                     }
                     if case == "tampering" and report["timeline"]:
                         report["timeline"][0]["receipt"]["canonical_hash"] = "0" * 64
-                    prediction = predictions(report)["iber"][0]
-                    if prediction and first_detection is None:
-                        first_detection = tick
+                    for name, (predicted, _) in predictions(report).items():
+                        if predicted and name not in first_detection:
+                            first_detection[name] = tick
                 for detector, (prediction, uncertain) in predictions(report).items():
                     rows.append(
                         {
@@ -178,11 +180,12 @@ def run(directory: Path, seeds: list[int], trials: int) -> dict[str, Any]:
                             "seed": seed,
                             "trial": trial,
                             "detector": detector,
-                            "prediction": prediction,
+                            "prediction": detector in first_detection,
+                            "final_prediction": prediction,
                             "inconclusive": uncertain,
                             "attack": label["attack"],
-                            "virtual_detection_latency_seconds": first_detection
-                            if detector == "iber" and label["attack"]
+                            "virtual_detection_latency_seconds": first_detection.get(detector)
+                            if label["attack"]
                             else None,
                         }
                     )
@@ -219,7 +222,7 @@ def run(directory: Path, seeds: list[int], trials: int) -> dict[str, Any]:
             [
                 r["virtual_detection_latency_seconds"]
                 for r in rows
-                if r["virtual_detection_latency_seconds"] is not None
+                if r["detector"] == "iber" and r["virtual_detection_latency_seconds"] is not None
             ],
             0.5,
         ),
