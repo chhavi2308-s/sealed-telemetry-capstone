@@ -11,7 +11,7 @@ from typing import Any
 from sealed_telemetry.lab import SCENARIOS, run_scenario
 from sealed_telemetry.measurements import percentile, reconstruction
 from sealed_telemetry.reconciliation import Policy, reconcile
-from sealed_telemetry.schema import Evidence, canonical, digest
+from sealed_telemetry.schema import Evidence, canonical, digest, timestamp
 
 
 def metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -71,7 +71,15 @@ def predictions(report: dict[str, Any]) -> dict[str, tuple[bool, bool]]:
             any(e.outcome == "success" and not e.invocation_id for e in observed),
             not bool(observed),
         ),
-        "fixed_missing": (len(observed) != len(intents), False),
+        "fixed_missing": (
+            any(
+                (timestamp(now) - timestamp(e.event_time_utc)).total_seconds() >= 15 for e in events
+            )
+            and len([e for e in observed if e.outcome == "success"]) != len(intents),
+            not any(
+                (timestamp(now) - timestamp(e.event_time_utc)).total_seconds() >= 15 for e in events
+            ),
+        ),
         "iber": outcome(findings) if integrity else (False, True),
         "without_deadlines": outcome(
             reconcile(

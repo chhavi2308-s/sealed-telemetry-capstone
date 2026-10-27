@@ -26,6 +26,7 @@ SCENARIOS = (
     "provider-outage",
     "response-failure",
     "bound-replay",
+    "legitimate-retry",
     "containment-recovery",
     "tampering",
 )
@@ -68,7 +69,7 @@ def run_scenario(directory: Path, scenario: str, start: str | None = None) -> di
             "containment-recovery",
         }
         provider_requests = [result["provider_request_id"]]
-        if attack:
+        if attack or scenario == "legitimate-retry":
             # Separate harness action uses the same exposed disposable credential.
             # No invocation or action ID is fabricated for external activity.
             replay_result = provider.call(
@@ -76,8 +77,10 @@ def run_scenario(directory: Path, scenario: str, start: str | None = None) -> di
                 now,
                 run_id,
                 "lab-v1",
-                invocation_id=invocation_id if scenario == "bound-replay" else None,
-                action_id=action_id if scenario == "bound-replay" else None,
+                invocation_id=invocation_id
+                if scenario in {"bound-replay", "legitimate-retry"}
+                else None,
+                action_id=action_id if scenario in {"bound-replay", "legitimate-retry"} else None,
             )
             provider_requests.append(replay_result["provider_request_id"])
         for source in ("app", "gateway", "provider"):

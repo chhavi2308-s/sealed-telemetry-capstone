@@ -14,7 +14,7 @@ SOURCE_TYPES = {
     "gateway": {"EXPECTED_ACTION"},
     "provider": {"PROVIDER_ACTION"},
     "health": {"SOURCE_HEALTH"},
-    "responder": {"RESPONSE_ACTION"},
+    "responder": {"RESPONSE_ACTION", "EXPECTED_ACTION", "INTENT_CREATED"},
     "platform": {"LAMBDA_PLATFORM", "API_INGRESS"},
     "cloudtrail": {"AWS_API"},
     "approval": {"APPROVAL_DECISION"},

@@ -21,7 +21,7 @@ LOG = logging.getLogger(__name__)
 def response(status: int, body: dict[str, Any]) -> dict[str, Any]:
     return {
         "statusCode": status,
-        "headers": {"Content-Type": "application/json"},
+        "headers": {"Content-Type": "application/json", "Cache-Control": "no-store"},
         "body": json.dumps(body),
     }
 

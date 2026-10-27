@@ -1,0 +1,474 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Transform": "AWS::Serverless-2016-10-31",
+  "Globals": {
+    "Function": {
+      "Runtime": "python3.12",
+      "Timeout": 25,
+      "MemorySize": 128,
+      "Architectures": [
+        "x86_64"
+      ],
+      "Tags": {
+        "Project": "SealedTelemetry",
+        "Environment": "Lab",
+        "Owner": {
+          "Ref": "Owner"
+        },
+        "ExpiresOn": {
+          "Ref": "ExpiresOn"
+        }
+      }
+    }
+  },
+  "Description": "Sealed-Telemetry compromisable workload account; no security evidence write/delete access",
+  "Parameters": {
+    "Owner": {
+      "Type": "String"
+    },
+    "ExpiresOn": {
+      "Type": "String"
+    },
+    "EnableSupplementary": {
+      "Type": "String",
+      "Default": "false",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Description": "Enable source subscriptions and chargeable selected CloudTrail data events after approval"
+    },
+    "SecurityAccountId": {
+      "Type": "String",
+      "AllowedPattern": "[0-9]{12}"
+    },
+    "SecurityStackName": {
+      "Type": "String"
+    },
+    "IntakeUrl": {
+      "Type": "String"
+    },
+    "IntakeArn": {
+      "Type": "String"
+    },
+    "SaasRecordsUrl": {
+      "Type": "String"
+    },
+    "PlatformQueueUrl": {
+      "Type": "String"
+    },
+    "PlatformQueueArn": {
+      "Type": "String"
+    }
+  },
+  "Conditions": {
+    "SupplementaryEnabled": {
+      "Fn::Equals": [
+        {
+          "Ref": "EnableSupplementary"
+        },
+        "true"
+      ]
+    }
+  },
+  "Resources": {
+    "AppFunction": {
+      "Type": "AWS::Serverless::Function",
+      "Properties": {
+        "CodeUri": "../src",
+        "Handler": "sealed_telemetry.cloud_lab.app",
+        "Role": {
+          "Fn::GetAtt": [
+            "AppRole",
+            "Arn"
+          ]
+        },
+        "Environment": {
+          "Variables": {
+            "INTAKE_URL": {
+              "Ref": "IntakeUrl"
+            },
+            "SAAS_URL": {
+              "Ref": "SaasRecordsUrl"
+            }
+          }
+        },
+        "FunctionName": {
+          "Fn::Sub": "${AWS::StackName}-app"
+        }
+      }
+    },
+    "AppLogPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "OwnFunctionLogsOnly",
+        "Roles": [
+          {
+            "Ref": "AppRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "AppLogs",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "AppLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${AppFunction}"
+        },
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
+      }
+    },
+    "AppPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "LabResourceAccess",
+        "Roles": [
+          {
+            "Ref": "AppRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "execute-api:Invoke"
+              ],
+              "Resource": {
+                "Ref": "IntakeArn"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "AppRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ],
+        "RoleName": {
+          "Fn::Sub": "${AWS::StackName}-app"
+        }
+      }
+    },
+    "GatewayInvokePermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Ref": "AppFunction"
+        },
+        "Principal": {
+          "Fn::Sub": "arn:${AWS::Partition}:iam::${SecurityAccountId}:role/${SecurityStackName}-gateway"
+        }
+      }
+    },
+    "ObservationRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": {
+          "Fn::Sub": "${AWS::StackName}-observation"
+        },
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": "sts:AssumeRole",
+              "Principal": {
+                "AWS": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${SecurityAccountId}:root"
+                }
+              },
+              "Condition": {
+                "ArnEquals": {
+                  "aws:PrincipalArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${SecurityAccountId}:role/${SecurityStackName}-health"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "ReadWorkloadAvailability",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "lambda:GetFunctionConfiguration"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "AppFunction",
+                      "Arn"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "PlatformIngestFunction": {
+      "Type": "AWS::Serverless::Function",
+      "Properties": {
+        "CodeUri": "../src",
+        "Handler": "sealed_telemetry.telemetry.cloudwatch",
+        "Role": {
+          "Fn::GetAtt": [
+            "PlatformIngestRole",
+            "Arn"
+          ]
+        },
+        "Timeout": 90,
+        "MemorySize": 256,
+        "Environment": {
+          "Variables": {
+            "PLATFORM_QUEUE_URL": {
+              "Ref": "PlatformQueueUrl"
+            },
+            "ALLOWED_LOG_GROUPS": {
+              "Fn::Sub": [
+                "[\"${A}\"]",
+                {
+                  "A": {
+                    "Ref": "AppLogs"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "PlatformIngestRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ],
+        "RoleName": {
+          "Fn::Sub": "${AWS::StackName}-telemetry"
+        }
+      }
+    },
+    "PlatformIngestPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "ScopedServiceAccess",
+        "Roles": [
+          {
+            "Ref": "PlatformIngestRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:SendMessage"
+              ],
+              "Resource": {
+                "Ref": "PlatformQueueArn"
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "PlatformIngestLogs",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "PlatformIngestLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${PlatformIngestFunction}"
+        },
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
+      }
+    },
+    "PlatformPermissionAppLogs": {
+      "Type": "AWS::Lambda::Permission",
+      "Condition": "SupplementaryEnabled",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "PlatformIngestFunction"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": {
+          "Fn::Sub": "logs.${AWS::Region}.amazonaws.com"
+        },
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        },
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "AppLogs",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "SubscriptionAppLogs": {
+      "Type": "AWS::Logs::SubscriptionFilter",
+      "Condition": "SupplementaryEnabled",
+      "DependsOn": "PlatformPermissionAppLogs",
+      "Properties": {
+        "DestinationArn": {
+          "Fn::GetAtt": [
+            "PlatformIngestFunction",
+            "Arn"
+          ]
+        },
+        "FilterPattern": "",
+        "LogGroupName": {
+          "Ref": "AppLogs"
+        }
+      }
+    }
+  }
+}

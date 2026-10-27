@@ -14,7 +14,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from sealed_telemetry.approvals import action_fields, verify_proof
 from sealed_telemetry.aws_support import SDK_CONFIG
-from sealed_telemetry.cloud_lab import emit, https_json
+from sealed_telemetry.cloud_lab import emit, https_json, invoke
 from sealed_telemetry.schema import Evidence, canonical, digest, new_event, timestamp, utcnow
 
 
@@ -104,33 +104,39 @@ def responder(event: dict[str, Any], context: Any) -> dict[str, Any]:
             EncryptionContext={"purpose": "sealed-lab-token", "fingerprint": fingerprint},
         )["Plaintext"]
         token = plaintext.decode()
-        table.update_item(
-            Key={"token_hash": row["token_hash"]},
-            UpdateExpression="SET revoked=:yes",
-            ExpressionAttributeValues={":yes": True},
-        )
-        if event.get("disable_integration") is True:
-            table.put_item(Item={"token_hash": "integration:enabled", "enabled": False})
-        verify_url = os.environ["SAAS_URL"]
-        if row["scope"] == "records:export":
-            verify_url = verify_url.rsplit("/", 1)[0] + "/export"
-        verification = https_json(
-            verify_url, headers={"Authorization": "Bearer " + token, "X-Run-Id": event["run_id"]}
-        )
-        body = verification.get("body", {})
-        verified = (
-            verification["status"] == 403
-            and body.get("error") == "invalid_token"
-            and body.get("reason") in {"revoked", "integration_disabled"}
-            and bool(body.get("provider_request_id"))
-        )
-        result.update(
-            status="verified" if verified else "unverified",
-            verified_at=utcnow() if verified else None,
-            verification_status=verification["status"],
-            verification_request_id=body.get("provider_request_id"),
-            retryable=not verified and verification["status"] in {429, 500, 502, 503, 504},
-        )
+        if event.get("action", "contain") == "recover":
+            result.update(restore(table, token, fingerprint, row["scope"], event))
+        elif event.get("action", "contain") == "contain":
+            table.update_item(
+                Key={"token_hash": row["token_hash"]},
+                UpdateExpression="SET revoked=:yes",
+                ExpressionAttributeValues={":yes": True},
+            )
+            if event.get("disable_integration") is True:
+                table.put_item(Item={"token_hash": "integration:enabled", "enabled": False})
+            verify_url = os.environ["SAAS_URL"]
+            if row["scope"] == "records:export":
+                verify_url = verify_url.rsplit("/", 1)[0] + "/export"
+            verification = https_json(
+                verify_url,
+                headers={"Authorization": "Bearer " + token, "X-Run-Id": event["run_id"]},
+            )
+            body = verification.get("body", {})
+            verified = (
+                verification["status"] == 403
+                and body.get("error") == "invalid_token"
+                and body.get("reason") in {"revoked", "integration_disabled"}
+                and bool(body.get("provider_request_id"))
+            )
+            result.update(
+                status="verified" if verified else "unverified",
+                verified_at=utcnow() if verified else None,
+                verification_status=verification["status"],
+                verification_request_id=body.get("provider_request_id"),
+                retryable=not verified and verification["status"] in {429, 500, 502, 503, 504},
+            )
+        else:
+            raise ValueError("unsupported response action")
     except (BotoCoreError, ClientError, URLError, TimeoutError, RuntimeError, ValueError) as exc:
         result["error_type"] = type(exc).__name__  # Never include provider body, URL auth or token.
     result["retryable"] = bool(result["retryable"] and attempt < 3)
@@ -143,7 +149,9 @@ def responder(event: dict[str, Any], context: Any) -> dict[str, Any]:
         event_time_utc=at,
         actor_pseudonym="lab-responder",
         credential_fingerprint=fingerprint,
-        operation="token:revoke:verify",
+        operation="integration:recover:verify"
+        if event.get("action") == "recover"
+        else "token:revoke:verify",
         resource_pseudonym="synthetic-integration",
         outcome="success" if result["status"] == "verified" else "failure",
         trace_context={
@@ -194,3 +202,72 @@ def responder(event: dict[str, Any], context: Any) -> dict[str, Any]:
     )
     emit(evidence)
     return result
+
+
+def restore(
+    table: Any, old_token: str, fingerprint: str, scope: str, event: dict[str, Any]
+) -> dict[str, Any]:
+    """Approved synthetic integration recovery; fail closed if either verification fails."""
+    # The old credential must already be revoked before reopening the integration.
+    rows = table.query(
+        IndexName="CredentialIndex",
+        KeyConditionExpression=Key("credential_fingerprint").eq(fingerprint),
+    )["Items"]
+    row = table.get_item(Key={"token_hash": rows[0]["token_hash"]}, ConsistentRead=True)["Item"]
+    if row.get("revoked") is not True:
+        raise ValueError("recovery requires previously revoked credential")
+    fresh = invoke(os.environ["ISSUER_FUNCTION"], {"operation": "issue", "scope": scope})
+    fields = dict(
+        run_id=event["run_id"],
+        scenario_id="lab-v1",
+        event_time_utc=utcnow(),
+        actor_pseudonym="lab-integration",
+        credential_fingerprint=fresh["credential_fingerprint"],
+        operation=scope,
+        resource_pseudonym="synthetic-records",
+        invocation_id=str(uuid4()),
+        action_id=str(uuid4()),
+    )
+    # Security-owned recovery claims are explicitly distinguished from workload claims.
+    for kind in ["EXPECTED_ACTION", "INTENT_CREATED"]:
+        emit(new_event("responder", kind, **fields))
+    table.put_item(Item={"token_hash": "integration:enabled", "enabled": True})
+    url = os.environ["SAAS_URL"]
+    if scope == "records:export":
+        url = url.rsplit("/", 1)[0] + "/export"
+    verified = False
+    try:
+        old = https_json(
+            url, headers={"Authorization": "Bearer " + old_token, "X-Run-Id": event["run_id"]}
+        )
+        fresh_result = https_json(
+            url,
+            headers={
+                "Authorization": "Bearer " + fresh["access_token"],
+                "X-Run-Id": event["run_id"],
+                "X-Invocation-Id": fields["invocation_id"],
+                "X-Action-Id": fields["action_id"],
+            },
+        )
+        verified = (
+            old["status"] == 403
+            and old.get("body", {}).get("reason") == "revoked"
+            and bool(old.get("body", {}).get("provider_request_id"))
+            and fresh_result["status"] == 200
+            and bool(fresh_result.get("body", {}).get("provider_request_id"))
+        )
+        return {
+            "status": "verified" if verified else "unverified",
+            "verified_at": utcnow() if verified else None,
+            "retryable": not verified,
+            "recovery": "verified" if verified else "unverified",
+            "fresh_credential_fingerprint": fresh["credential_fingerprint"],
+            "integration_disabled": not verified,
+            "old_credential_verification_id": old.get("body", {}).get("provider_request_id"),
+            "fresh_credential_verification_id": fresh_result.get("body", {}).get(
+                "provider_request_id"
+            ),
+        }
+    finally:
+        if not verified:
+            table.put_item(Item={"token_hash": "integration:enabled", "enabled": False})

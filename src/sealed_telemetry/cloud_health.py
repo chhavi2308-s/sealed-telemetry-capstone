@@ -19,9 +19,22 @@ def monitor(event: dict[str, Any], context: Any) -> dict[str, str]:
     services = json.loads(os.environ["MONITORED_FUNCTIONS"])
     health = {"app": "healthy", "gateway": "healthy", "provider": "healthy", "collector": "healthy"}
     lambda_client = boto3.client("lambda", config=SDK_CONFIG)
+    workload_client = lambda_client
+    if os.environ.get("WORKLOAD_OBSERVATION_ROLE"):
+        credentials = boto3.client("sts", config=SDK_CONFIG).assume_role(
+            RoleArn=os.environ["WORKLOAD_OBSERVATION_ROLE"], RoleSessionName="sealed-health"
+        )["Credentials"]
+        workload_client = boto3.client(
+            "lambda",
+            config=SDK_CONFIG,
+            aws_access_key_id=credentials["AccessKeyId"],
+            aws_secret_access_key=credentials["SecretAccessKey"],
+            aws_session_token=credentials["SessionToken"],
+        )
     for source, functions in services.items():
         for function in functions:
-            status = lambda_client.get_function_configuration(FunctionName=function)
+            client = workload_client if source == "app" else lambda_client
+            status = client.get_function_configuration(FunctionName=function)
             if status.get("State") != "Active" or status.get("LastUpdateStatus") == "Failed":
                 health[source] = "unhealthy"
     sqs = boto3.client("sqs", config=SDK_CONFIG)

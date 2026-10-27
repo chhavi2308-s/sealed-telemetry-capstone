@@ -18,6 +18,6 @@ def test_metrics_denominators():
 def test_experiment_outputs(tmp_path):
     summary = experiment(tmp_path / "experiment", 2026, 1)
     assert len(summary["metrics"]) == 8
-    assert summary["metrics"]["iber"]["n"] == 15
+    assert summary["metrics"]["iber"]["n"] == 16
     assert summary["aws_cost"] is None
     assert summary["mode"] == "local_smoke"

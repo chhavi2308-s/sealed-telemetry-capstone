@@ -77,7 +77,29 @@
               "Resource": "*"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       },
       "DeletionPolicy": "Retain",
       "UpdateReplacePolicy": "Retain"
@@ -118,7 +140,29 @@
           "BlockPublicPolicy": true,
           "IgnorePublicAcls": true,
           "RestrictPublicBuckets": true
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       },
       "DeletionPolicy": "Retain",
       "UpdateReplacePolicy": "Retain"
@@ -184,14 +228,58 @@
       "Type": "AWS::SQS::Queue",
       "Properties": {
         "MessageRetentionPeriod": 1209600,
-        "SqsManagedSseEnabled": true
+        "SqsManagedSseEnabled": true,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "AuditFailureQueue": {
       "Type": "AWS::SQS::Queue",
       "Properties": {
         "MessageRetentionPeriod": 1209600,
-        "SqsManagedSseEnabled": true
+        "SqsManagedSseEnabled": true,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "EvidenceQueue": {
@@ -208,7 +296,29 @@
             ]
           },
           "maxReceiveCount": 5
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "Events": {
@@ -263,6 +373,28 @@
               "ProjectionType": "ALL"
             }
           }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
         ]
       },
       "DeletionPolicy": "Retain",
@@ -293,6 +425,28 @@
           {
             "AttributeName": "decision_id",
             "KeyType": "RANGE"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
           }
         ]
       },
@@ -333,6 +487,28 @@
             ],
             "Projection": {
               "ProjectionType": "ALL"
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
             }
           }
         ]
@@ -385,6 +561,28 @@
               "ProjectionType": "KEYS_ONLY"
             }
           }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
         ]
       },
       "DeletionPolicy": "Retain",
@@ -397,7 +595,29 @@
         "GenerateSecretString": {
           "PasswordLength": 64,
           "ExcludePunctuation": true
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "FindingsBus": {
@@ -405,12 +625,57 @@
       "Properties": {
         "Name": {
           "Fn::Sub": "${AWS::StackName}-findings"
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "AlarmTopic": {
       "Type": "AWS::SNS::Topic",
-      "Properties": {}
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
+      }
     },
     "IntakeApi": {
       "Type": "AWS::Serverless::Api",
@@ -436,13 +701,45 @@
             ]
           },
           "Format": "{\"requestId\":\"$context.requestId\",\"status\":\"$context.status\",\"requestTimeEpoch\":\"$context.requestTimeEpoch\"}"
+        },
+        "Tags": {
+          "Project": "SealedTelemetry",
+          "Environment": "Lab",
+          "Owner": {
+            "Ref": "Owner"
+          },
+          "ExpiresOn": {
+            "Ref": "ExpiresOn"
+          }
         }
       }
     },
     "IntakeApiLogs": {
       "Type": "AWS::Logs::LogGroup",
       "Properties": {
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "WorkloadApi": {
@@ -469,13 +766,45 @@
             ]
           },
           "Format": "{\"requestId\":\"$context.requestId\",\"status\":\"$context.status\",\"requestTimeEpoch\":\"$context.requestTimeEpoch\"}"
+        },
+        "Tags": {
+          "Project": "SealedTelemetry",
+          "Environment": "Lab",
+          "Owner": {
+            "Ref": "Owner"
+          },
+          "ExpiresOn": {
+            "Ref": "ExpiresOn"
+          }
         }
       }
     },
     "WorkloadApiLogs": {
       "Type": "AWS::Logs::LogGroup",
       "Properties": {
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "SaasApi": {
@@ -500,13 +829,45 @@
             ]
           },
           "Format": "{\"requestId\":\"$context.requestId\",\"status\":\"$context.status\",\"requestTimeEpoch\":\"$context.requestTimeEpoch\"}"
+        },
+        "Tags": {
+          "Project": "SealedTelemetry",
+          "Environment": "Lab",
+          "Owner": {
+            "Ref": "Owner"
+          },
+          "ExpiresOn": {
+            "Ref": "ExpiresOn"
+          }
         }
       }
     },
     "SaasApiLogs": {
       "Type": "AWS::Logs::LogGroup",
       "Properties": {
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "GatewayRole": {
@@ -523,7 +884,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "AppRole": {
@@ -540,7 +923,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "IssuerRole": {
@@ -557,7 +962,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "SaasRole": {
@@ -574,7 +1001,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "AuditForwarderRole": {
@@ -591,7 +1040,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "CollectorRole": {
@@ -608,7 +1079,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "NormalizerRole": {
@@ -625,7 +1118,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "DetectorRole": {
@@ -642,7 +1157,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "CollectorFunction": {
@@ -720,7 +1257,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${CollectorFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "NormalizerFunction": {
@@ -854,7 +1413,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${NormalizerFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "IssuerFunction": {
@@ -901,7 +1482,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${IssuerFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "SaasFunction": {
@@ -955,7 +1558,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${SaasFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "AuditForwarderFunction": {
@@ -1022,7 +1647,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${AuditForwarderFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "AppFunction": {
@@ -1054,7 +1701,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${AppFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "GatewayFunction": {
@@ -1104,7 +1773,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${GatewayFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "DetectorFunction": {
@@ -1157,7 +1848,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${DetectorFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "CollectorPolicy": {
@@ -1616,6 +2329,19 @@
                   "Arn"
                 ]
               }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:GetItem",
+                "dynamodb:PutItem"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "ActiveCredentials",
+                  "Arn"
+                ]
+              }
             }
           ]
         }
@@ -1647,6 +2373,28 @@
           {
             "Ref": "AlarmTopic"
           }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
         ]
       }
     },
@@ -1675,6 +2423,28 @@
         "AlarmActions": [
           {
             "Ref": "AlarmTopic"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
           }
         ]
       }
@@ -1705,6 +2475,28 @@
           {
             "Ref": "AlarmTopic"
           }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
         ]
       }
     },
@@ -1730,6 +2522,28 @@
         "AlarmActions": [
           {
             "Ref": "AlarmTopic"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
           }
         ]
       }
@@ -1757,6 +2571,28 @@
           {
             "Ref": "AlarmTopic"
           }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
         ]
       }
     },
@@ -1782,6 +2618,28 @@
         "AlarmActions": [
           {
             "Ref": "AlarmTopic"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
           }
         ]
       }
@@ -1809,6 +2667,28 @@
           {
             "Ref": "AlarmTopic"
           }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
         ]
       }
     },
@@ -1834,6 +2714,28 @@
         "AlarmActions": [
           {
             "Ref": "AlarmTopic"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
           }
         ]
       }
@@ -1861,6 +2763,28 @@
           {
             "Ref": "AlarmTopic"
           }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
         ]
       }
     },
@@ -1886,6 +2810,28 @@
         "AlarmActions": [
           {
             "Ref": "AlarmTopic"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
           }
         ]
       }
@@ -1913,6 +2859,28 @@
           {
             "Ref": "AlarmTopic"
           }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
         ]
       }
     },
@@ -1937,7 +2905,29 @@
               "Resource": "*"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "Responses": {
@@ -1960,6 +2950,28 @@
             "AttributeName": "response_id",
             "KeyType": "HASH"
           }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
         ]
       }
     },
@@ -1977,7 +2989,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "ResponderFunction": {
@@ -2014,6 +3048,9 @@
             },
             "RESPONSE_HISTORY_TABLE": {
               "Ref": "ResponseHistory"
+            },
+            "ISSUER_FUNCTION": {
+              "Ref": "IssuerFunction"
             }
           }
         }
@@ -2025,7 +3062,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${ResponderFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "ResponderPolicy": {
@@ -2120,6 +3179,18 @@
                   "Arn"
                 ]
               }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "lambda:InvokeFunction"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "IssuerFunction",
+                  "Arn"
+                ]
+              }
             }
           ]
         }
@@ -2167,6 +3238,28 @@
                   ]
                 }
               ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
             }
           }
         ]
@@ -2225,7 +3318,8 @@
                 "approved.$": "$.approval.approved",
                 "approved_by.$": "$.approval.approved_by",
                 "approval_id.$": "$.approval.approval_id",
-                "disable_integration.$": "$.approval.disable_integration"
+                "disable_integration.$": "$.approval.disable_integration",
+                "action.$": "$.approval.action"
               }
             },
             "Verify": {
@@ -2320,7 +3414,29 @@
             }
           },
           "TimeoutSeconds": 4500
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "FindingRoute": {
@@ -2416,7 +3532,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "HealthFunction": {
@@ -2495,7 +3633,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${HealthFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "HealthPolicy": {
@@ -2626,6 +3786,28 @@
           {
             "Ref": "AlarmTopic"
           }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
         ]
       }
     },
@@ -2651,7 +3833,29 @@
         "TimeToLiveSpecification": {
           "AttributeName": "expires_at",
           "Enabled": true
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "SourceHealth": {
@@ -2671,6 +3875,28 @@
           {
             "AttributeName": "source_id",
             "KeyType": "HASH"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
           }
         ]
       }
@@ -2698,6 +3924,28 @@
           {
             "Ref": "AlarmTopic"
           }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
         ]
       }
     },
@@ -2723,6 +3971,28 @@
         "AlarmActions": [
           {
             "Ref": "AlarmTopic"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
           }
         ]
       }
@@ -3021,21 +4291,87 @@
       "Type": "AWS::SQS::Queue",
       "Properties": {
         "MessageRetentionPeriod": 1209600,
-        "SqsManagedSseEnabled": true
+        "SqsManagedSseEnabled": true,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "CloudTrailDLQ": {
       "Type": "AWS::SQS::Queue",
       "Properties": {
         "MessageRetentionPeriod": 1209600,
-        "SqsManagedSseEnabled": true
+        "SqsManagedSseEnabled": true,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "TelemetryFailureQueue": {
       "Type": "AWS::SQS::Queue",
       "Properties": {
         "MessageRetentionPeriod": 1209600,
-        "SqsManagedSseEnabled": true
+        "SqsManagedSseEnabled": true,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "PlatformQueue": {
@@ -3052,7 +4388,29 @@
             ]
           },
           "maxReceiveCount": 5
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "CloudTrailQueue": {
@@ -3069,7 +4427,29 @@
             ]
           },
           "maxReceiveCount": 5
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "PlatformIngestRole": {
@@ -3086,7 +4466,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "PlatformIngestFunction": {
@@ -3157,7 +4559,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${PlatformIngestFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "PlatformIngestLogPolicy": {
@@ -3477,7 +4901,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "CloudTrailIngestFunction": {
@@ -3553,7 +4999,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${CloudTrailIngestFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "CloudTrailIngestLogPolicy": {
@@ -3776,7 +5244,29 @@
               }
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "TrailBucketPolicy": {
@@ -3937,6 +5427,28 @@
               }
             ]
           }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
         ]
       }
     },
@@ -4059,6 +5571,28 @@
           {
             "Ref": "AlarmTopic"
           }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
         ]
       }
     },
@@ -4087,6 +5621,28 @@
         "AlarmActions": [
           {
             "Ref": "AlarmTopic"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
           }
         ]
       }
@@ -4117,6 +5673,28 @@
           {
             "Ref": "AlarmTopic"
           }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
         ]
       }
     },
@@ -4124,7 +5702,29 @@
       "Type": "AWS::SQS::Queue",
       "Properties": {
         "MessageRetentionPeriod": 1209600,
-        "SqsManagedSseEnabled": true
+        "SqsManagedSseEnabled": true,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "ProviderQueue": {
@@ -4141,7 +5741,29 @@
             ]
           },
           "maxReceiveCount": 5
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "ProviderDLQAlarm": {
@@ -4169,6 +5791,28 @@
         "AlarmActions": [
           {
             "Ref": "AlarmTopic"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
           }
         ]
       }
@@ -4226,6 +5870,28 @@
               "ProjectionType": "ALL"
             }
           }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
         ]
       }
     },
@@ -4260,6 +5926,28 @@
             "AttributeName": "attempt",
             "KeyType": "RANGE"
           }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
         ]
       }
     },
@@ -4284,7 +5972,29 @@
               "Resource": "*"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "OperatorApi": {
@@ -4302,7 +6012,17 @@
             "ThrottlingBurstLimit": 10,
             "ThrottlingRateLimit": 5
           }
-        ]
+        ],
+        "Tags": {
+          "Project": "SealedTelemetry",
+          "Environment": "Lab",
+          "Owner": {
+            "Ref": "Owner"
+          },
+          "ExpiresOn": {
+            "Ref": "ExpiresOn"
+          }
+        }
       }
     },
     "ApprovalBrokerRole": {
@@ -4319,7 +6039,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "ApprovalBrokerFunction": {
@@ -4351,7 +6093,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${ApprovalBrokerFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "ApprovalBrokerPolicy": {
@@ -4424,7 +6188,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "ApprovalApiFunction": {
@@ -4494,7 +6280,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${ApprovalApiFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "ApprovalApiPolicy": {
@@ -4601,7 +6409,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "CasesFunction": {
@@ -4645,7 +6475,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${CasesFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "CasesPolicy": {
@@ -4700,7 +6552,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "DispatchFunction": {
@@ -4729,7 +6603,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${DispatchFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "DispatchPolicy": {
@@ -4833,7 +6729,29 @@
               "Action": "sts:AssumeRole"
             }
           ]
-        }
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "ReplayFunction": {
@@ -4851,7 +6769,7 @@
         "Environment": {
           "Variables": {
             "OUTBOX_TABLE": {
-              "Ref": "Outbox"
+              "Ref": "ProviderOutbox"
             },
             "PROVIDER_QUEUE_URL": {
               "Ref": "ProviderQueue"
@@ -4866,7 +6784,29 @@
         "LogGroupName": {
           "Fn::Sub": "/aws/lambda/${ReplayFunction}"
         },
-        "RetentionInDays": 14
+        "RetentionInDays": 14,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     },
     "ReplayPolicy": {
@@ -4888,7 +6828,7 @@
               ],
               "Resource": {
                 "Fn::GetAtt": [
-                  "Outbox",
+                  "ProviderOutbox",
                   "Arn"
                 ]
               }
@@ -4913,6 +6853,37 @@
               ],
               "Resource": {
                 "Fn::Sub": "${ReplayLogs.Arn}:*"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ProviderQueueTransportPolicy": {
+      "Type": "AWS::SQS::QueuePolicy",
+      "Properties": {
+        "Queues": [
+          {
+            "Ref": "ProviderQueue"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "sqs:*",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "ProviderQueue",
+                  "Arn"
+                ]
+              },
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
               }
             }
           ]

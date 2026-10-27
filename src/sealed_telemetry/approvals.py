@@ -19,6 +19,7 @@ from sealed_telemetry.schema import Evidence, canonical, digest, new_event, time
 
 def action_fields(event: dict[str, Any]) -> dict[str, Any]:
     return {
+        "action": event.get("action", "contain"),
         "decision_id": event["decision_id"],
         "run_id": event["run_id"],
         "credential_fingerprint": event["credential_fingerprint"],
@@ -131,7 +132,15 @@ def api(event: dict[str, Any], context: Any) -> dict[str, Any]:
         row = table.get_item(Key={"approval_id": approval_id}, ConsistentRead=True).get("Item")
         if not row:
             return response(404, {"error": "not_found"})
-        action = {**row["finding"], "disable_integration": body.get("disable_integration", False)}
+        if body.get("action", "contain") not in {"contain", "recover"}:
+            raise ValueError("unsupported response action")
+        action = {
+            **row["finding"],
+            "action": body.get("action", "contain"),
+            "disable_integration": body.get("disable_integration", False),
+        }
+        if action["action"] == "recover" and action["disable_integration"]:
+            raise ValueError("recovery cannot also disable integration")
         request_hash = digest(action)
         if row["status"] == "pending":
             if int(row["expires_at"]) < timestamp(utcnow()).timestamp():
@@ -177,6 +186,7 @@ def api(event: dict[str, Any], context: Any) -> dict[str, Any]:
         if row.get("request_hash") != request_hash or row.get("approved") != body["approved"]:
             return response(409, {"error": "approval_decision_conflict"})
         callback = {
+            "action": action["action"],
             "approved": row["approved"],
             "approved_by": row["approved_by"],
             "approval_id": approval_id,
