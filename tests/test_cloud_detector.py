@@ -146,3 +146,33 @@ def test_capacity_overflow_does_not_starve_other_credentials(monkeypatch):
         assert body["state"] == "INCONCLUSIVE"
         assert body["reason_codes"] == ["EVIDENCE_CAPACITY_EXCEEDED"]
         assert tables["events"].query.call_count == 2
+
+
+def test_expired_active_pages_are_bounded_and_cursor_advances(monkeypatch):
+    from unittest.mock import MagicMock, patch
+
+    for env, value in [
+        ("EVENT_TABLE", "events"),
+        ("DECISION_TABLE", "decisions"),
+        ("ACTIVE_TABLE", "active"),
+        ("HEALTH_TABLE", "health"),
+    ]:
+        monkeypatch.setenv(env, value)
+    tables = {name: MagicMock() for name in ["events", "decisions", "active", "health"]}
+    tables["active"].get_item.return_value = {}
+    tables["health"].get_item.return_value = {}
+    tables["active"].scan.side_effect = [
+        {
+            "Items": [{"credential_fingerprint": "expired-" + str(i), "expires_at": 1}],
+            "LastEvaluatedKey": {"credential_fingerprint": "expired-" + str(i)},
+        }
+        for i in range(20)
+    ]
+    resource = MagicMock()
+    resource.Table.side_effect = lambda name: tables[name]
+    with patch("sealed_telemetry.cloud_detector.boto3.resource", return_value=resource):
+        assert detector({}, None)["credential_groups"] == 0
+    assert tables["active"].scan.call_count == 20
+    assert tables["active"].put_item.call_args.kwargs["Item"]["cursor"] == {
+        "credential_fingerprint": "expired-19"
+    }

@@ -20,6 +20,7 @@ from sealed_telemetry.schema import Evidence, canonical, digest, new_event, time
 def action_fields(event: dict[str, Any]) -> dict[str, Any]:
     return {
         "action": event.get("action", "contain"),
+        "case_id": event["case_id"],
         "decision_id": event["decision_id"],
         "run_id": event["run_id"],
         "credential_fingerprint": event["credential_fingerprint"],
@@ -100,6 +101,24 @@ def verify_proof(event: dict[str, Any]) -> None:
         or row.get("approved_by") != event.get("approved_by")
     ):
         raise ValueError("approved action proof missing, expired or changed")
+    verify_current(event)
+
+
+def verify_current(event: dict[str, Any]) -> None:
+    row = (
+        boto3.resource("dynamodb", config=SDK_CONFIG)
+        .Table(os.environ["DECISION_TABLE"])
+        .get_item(Key={"case_id": event["case_id"], "decision_id": "CURRENT"}, ConsistentRead=True)
+        .get("Item")
+    )
+    if not row or row.get("current_decision_id") != event["decision_id"]:
+        raise ValueError("finding revised or unavailable")
+    current = json.loads(row["body"])
+    if any(
+        current.get(k) != event.get(k)
+        for k in ["case_id", "run_id", "state", "credential_fingerprint"]
+    ):
+        raise ValueError("finding subject or state changed")
 
 
 def api(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -145,6 +164,11 @@ def api(event: dict[str, Any], context: Any) -> dict[str, Any]:
         if action["action"] == "recover" and action["disable_integration"]:
             raise ValueError("recovery cannot also disable integration")
         request_hash = digest(action)
+        if body["approved"] and row["status"] not in {"approved", "rejected"}:
+            try:
+                verify_current(action)
+            except ValueError:
+                return response(409, {"error": "finding_revised_review_current_case"})
         if row["status"] == "pending":
             if int(row["expires_at"]) < timestamp(utcnow()).timestamp():
                 return response(410, {"error": "approval_expired"})
@@ -170,7 +194,7 @@ def api(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 UpdateExpression=(
                     "SET #s=:claimed, approved=:approved, approved_by=:actor, "
                     "request_hash=:hash, authorized_until=:until, "
-                    "evidence=:evidence, action_fields=:action, expires_at=:expiry"
+                    "evidence=:evidence, action_fields=:action REMOVE expires_at"
                 ),
                 ConditionExpression="#s=:pending",
                 ExpressionAttributeNames={"#s": "status"},
@@ -181,7 +205,6 @@ def api(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     ":actor": principal,
                     ":hash": request_hash,
                     ":until": int(timestamp(now).timestamp()) + 900,
-                    ":expiry": int(timestamp(now).timestamp()) + 86400,
                     ":evidence": canonical(evidence.to_dict()).decode(),
                     ":action": action,
                 },
@@ -197,7 +220,10 @@ def api(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "request_hash": request_hash,
             "disable_integration": action["disable_integration"],
         }
+        emit(Evidence.parse(json.loads(row["evidence"]), "approval"))
         if row["status"] not in {"approved", "rejected"}:
+            if int(row["authorized_until"]) < timestamp(utcnow()).timestamp():
+                return response(410, {"error": "approval_authorization_expired"})
             token = (
                 boto3.client("kms", config=SDK_CONFIG)
                 .decrypt(
@@ -232,11 +258,10 @@ def api(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     )
             table.update_item(
                 Key={"approval_id": approval_id},
-                UpdateExpression="SET #s=:s",
+                UpdateExpression="SET #s=:s REMOVE encrypted_token",
                 ExpressionAttributeNames={"#s": "status"},
                 ExpressionAttributeValues={":s": "approved" if row["approved"] else "rejected"},
             )
-        emit(Evidence.parse(json.loads(row["evidence"]), "approval"))
         return response(
             200,
             {"approval_id": approval_id, "status": "approved" if row["approved"] else "rejected"},

@@ -13,6 +13,7 @@ def test_recovery_verifies_old_and_new_and_fails_closed(
     monkeypatch, old_reason, fresh_status, expected
 ):
     monkeypatch.setenv("ISSUER_FUNCTION", "issuer")
+    monkeypatch.setenv("TOKEN_TABLE", "tokens")
     monkeypatch.setenv("SAAS_URL", "https://synthetic.example/records")
     table = MagicMock()
     table.query.return_value = {"Items": [{"token_hash": "old-hash"}]}
@@ -23,6 +24,15 @@ def test_recovery_verifies_old_and_new_and_fails_closed(
             return_value={"access_token": "fresh-disposable", "credential_fingerprint": "b" * 64},
         ),
         patch("sealed_telemetry.cloud_response.emit"),
+        patch(
+            "sealed_telemetry.cloud_response.guarded_registry_write",
+            side_effect=lambda event, change: table.put_item(
+                Item={
+                    "token_hash": "integration:enabled",
+                    "enabled": change["Put"]["Item"]["enabled"]["BOOL"],
+                }
+            ),
+        ),
         patch(
             "sealed_telemetry.cloud_response.https_json",
             side_effect=[

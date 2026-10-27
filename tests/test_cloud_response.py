@@ -5,6 +5,7 @@ from unittest.mock import patch
 import boto3
 import pytest
 from moto import mock_aws
+from test_approvals import seed_case
 
 from sealed_telemetry.approvals import action_fields
 from sealed_telemetry.cloud_lab import issuer
@@ -63,6 +64,7 @@ def test_cloud_responder_verified_and_idempotent(monkeypatch, status, scope, rea
         )
     token = issuer({"operation": "issue", "scope": scope}, None)
     finding = {
+        "case_id": "run:case",
         "approval_id": "approval",
         "approved_by": "operator",
         "state": "SUSPICIOUS",
@@ -72,6 +74,7 @@ def test_cloud_responder_verified_and_idempotent(monkeypatch, status, scope, rea
         "credential_fingerprint": token["credential_fingerprint"],
         "run_id": "run",
     }
+    seed_case(monkeypatch, finding)
     boto3.resource("dynamodb").Table("approvals").put_item(
         Item={
             "approval_id": "approval",
@@ -82,18 +85,24 @@ def test_cloud_responder_verified_and_idempotent(monkeypatch, status, scope, rea
             "authorized_until": int(timestamp(utcnow()).timestamp()) + 900,
         }
     )
-    with (
-        patch(
-            "sealed_telemetry.cloud_response.https_json",
-            return_value={
-                "status": status,
-                "body": {
-                    "error": "invalid_token",
-                    "reason": reason,
-                    "provider_request_id": "provider-1",
-                },
+    probe_calls = []
+
+    def probe(*args, **kwargs):
+        probe_calls.append(1)
+        phase_reason = (
+            "integration_disabled" if reason == "revoked" and len(probe_calls) % 2 == 0 else reason
+        )
+        return {
+            "status": status,
+            "body": {
+                "error": "invalid_token",
+                "reason": phase_reason,
+                "provider_request_id": "provider-" + str(len(probe_calls)),
             },
-        ) as call,
+        }
+
+    with (
+        patch("sealed_telemetry.cloud_response.https_json", side_effect=probe) as call,
         patch("sealed_telemetry.cloud_response.emit") as emit,
     ):
         assert responder(finding, None)["status"] == (
@@ -102,7 +111,7 @@ def test_cloud_responder_verified_and_idempotent(monkeypatch, status, scope, rea
         assert responder(finding, None)["status"] == (
             "verified" if status == 403 and reason == "revoked" else "unverified"
         )
-        assert call.call_count == (2 if status == 500 else 1)
+        assert call.call_count == (4 if status == 500 else 2)
         assert call.call_args.args[0].endswith(
             "/export" if scope == "records:export" else "/records"
         )

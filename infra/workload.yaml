@@ -76,6 +76,9 @@
     },
     "PlatformQueueArn": {
       "Type": "String"
+    },
+    "SecurityTrailBucketName": {
+      "Type": "String"
     }
   },
   "Conditions": {
@@ -97,6 +100,22 @@
             "false"
           ]
         }
+      ]
+    },
+    "TrailEnabled": {
+      "Fn::Equals": [
+        {
+          "Ref": "EnableSupplementary"
+        },
+        "true"
+      ]
+    },
+    "Quiesced": {
+      "Fn::Equals": [
+        {
+          "Ref": "Quiesce"
+        },
+        "true"
       ]
     }
   },
@@ -548,6 +567,98 @@
         "LogGroupName": {
           "Ref": "AppLogs"
         }
+      }
+    },
+    "WorkloadTrail": {
+      "Type": "AWS::CloudTrail::Trail",
+      "Condition": "TrailEnabled",
+      "Properties": {
+        "TrailName": {
+          "Fn::Sub": "${AWS::StackName}-aws-api"
+        },
+        "S3BucketName": {
+          "Ref": "SecurityTrailBucketName"
+        },
+        "IsLogging": {
+          "Fn::If": [
+            "Quiesced",
+            false,
+            true
+          ]
+        },
+        "IsMultiRegionTrail": false,
+        "IncludeGlobalServiceEvents": false,
+        "EnableLogFileValidation": true,
+        "AdvancedEventSelectors": [
+          {
+            "Name": "Management except cryptographic archive feedback",
+            "FieldSelectors": [
+              {
+                "Field": "eventCategory",
+                "Equals": [
+                  "Management"
+                ]
+              },
+              {
+                "Field": "eventSource",
+                "NotEquals": [
+                  "kms.amazonaws.com",
+                  "rdsdata.amazonaws.com"
+                ]
+              }
+            ]
+          },
+          {
+            "Name": "Selected Lambda invocation data",
+            "FieldSelectors": [
+              {
+                "Field": "eventCategory",
+                "Equals": [
+                  "Data"
+                ]
+              },
+              {
+                "Field": "resources.type",
+                "Equals": [
+                  "AWS::Lambda::Function"
+                ]
+              },
+              {
+                "Field": "resources.ARN",
+                "Equals": [
+                  {
+                    "Fn::GetAtt": [
+                      "AppFunction",
+                      "Arn"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetry"
+          },
+          {
+            "Key": "Environment",
+            "Value": "Lab"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
       }
     }
   }

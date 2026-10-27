@@ -68,7 +68,7 @@ def profiles(template: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     bindings = variables["ALLOWED_LOG_GROUPS"]["Fn::Sub"]
     bindings[0] = bindings[0].replace('"${A}",', "")
     bindings[1].pop("A")
-    # A security-account trail cannot observe another account's Lambda invocations.
+    # Security trail selects security-owned functions; workload has its own trail below.
     resources["SupportedApiTrail"]["Properties"]["AdvancedEventSelectors"][1]["FieldSelectors"][2][
         "Equals"
     ] = [
@@ -251,6 +251,40 @@ def profiles(template: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
             "Resource": {"Fn::GetAtt": ["PlatformIngestLogs", "Arn"]},
         },
     ]
+    workload["Parameters"]["SecurityTrailBucketName"] = {"Type": "String"}
+    workload["Conditions"]["TrailEnabled"] = copy.deepcopy(template["Conditions"]["TrailEnabled"])
+    workload["Conditions"]["Quiesced"] = copy.deepcopy(template["Conditions"]["Quiesced"])
+    trail = copy.deepcopy(template["Resources"]["SupportedApiTrail"])
+    trail.pop("DependsOn", None)
+    trail["Properties"]["S3BucketName"] = ref("SecurityTrailBucketName")
+    trail["Properties"]["AdvancedEventSelectors"][1]["FieldSelectors"][2]["Equals"] = [
+        {"Fn::GetAtt": ["AppFunction", "Arn"]}
+    ]
+    wr["WorkloadTrail"] = trail
+    # Only CloudTrail service delivery from the exact workload trail can append native logs.
+    statements = resources["TrailBucketPolicy"]["Properties"]["PolicyDocument"]["Statement"]
+    for statement in list(statements):
+        if (
+            statement.get("Effect") == "Allow"
+            and statement.get("Principal", {}).get("Service") == "cloudtrail.amazonaws.com"
+        ):
+            cross = copy.deepcopy(statement)
+            cross["Condition"]["StringEquals"]["aws:SourceArn"] = sub(
+                "arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${WorkloadAccountId}:trail/${WorkloadStackName}-aws-api"
+            )
+            if isinstance(cross["Resource"], dict) and "Fn::Sub" in cross["Resource"]:
+                cross["Resource"]["Fn::Sub"] = cross["Resource"]["Fn::Sub"].replace(
+                    "${AWS::AccountId}", "${WorkloadAccountId}"
+                )
+            statements.append(cross)
+    notifications = resources["TrailBucket"]["Properties"]["NotificationConfiguration"][
+        "LambdaConfigurations"
+    ]
+    notification = copy.deepcopy(notifications[0])
+    for rule in notification["Filter"]["S3Key"]["Rules"]:
+        if rule["Name"] == "prefix":
+            rule["Value"] = sub("AWSLogs/${WorkloadAccountId}/CloudTrail/")
+    notifications.append(notification)
     return security, workload
 
 

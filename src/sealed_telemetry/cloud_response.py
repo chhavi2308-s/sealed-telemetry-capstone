@@ -83,9 +83,25 @@ def responder(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "approval_id": response_id,
         "run_id": event["run_id"],
         "attempt": attempt,
-        "integration_disabled": event.get("disable_integration") is True,
+        "integration_disabled": None,
+        "token_revocation_verified": False,
         "recovery": "separate_approved_recovery_required",
     }
+    resource.Table(os.environ["RESPONSE_HISTORY_TABLE"]).put_item(
+        Item={
+            "response_id": response_id,
+            "attempt": -attempt,
+            "phase": "started",
+            "body": canonical(
+                {
+                    "action": action_fields(event),
+                    "approved_by": event["approved_by"],
+                    "started_at": utcnow(),
+                }
+            ).decode(),
+        },
+        ConditionExpression="attribute_not_exists(response_id)",
+    )
     fingerprint = event["credential_fingerprint"]
     try:
         table = resource.Table(os.environ["TOKEN_TABLE"])
@@ -107,26 +123,67 @@ def responder(event: dict[str, Any], context: Any) -> dict[str, Any]:
         if event.get("action", "contain") == "recover":
             result.update(restore(table, token, fingerprint, row["scope"], event))
         elif event.get("action", "contain") == "contain":
-            table.update_item(
-                Key={"token_hash": row["token_hash"]},
-                UpdateExpression="SET revoked=:yes",
-                ExpressionAttributeValues={":yes": True},
+            guarded_registry_write(
+                event,
+                {
+                    "Update": {
+                        "TableName": os.environ["TOKEN_TABLE"],
+                        "Key": {"token_hash": {"S": row["token_hash"]}},
+                        "UpdateExpression": "SET revoked=:yes",
+                        "ExpressionAttributeValues": {":yes": {"BOOL": True}},
+                    }
+                },
             )
-            if event.get("disable_integration") is True:
-                table.put_item(Item={"token_hash": "integration:enabled", "enabled": False})
             verify_url = os.environ["SAAS_URL"]
             if row["scope"] == "records:export":
                 verify_url = verify_url.rsplit("/", 1)[0] + "/export"
-            verification = https_json(
-                verify_url,
-                headers={"Authorization": "Bearer " + token, "X-Run-Id": event["run_id"]},
-            )
+
+            def probe() -> dict[str, Any]:
+                return https_json(
+                    verify_url,
+                    headers={"Authorization": "Bearer " + token, "X-Run-Id": event["run_id"]},
+                )
+
+            verification = probe()
             body = verification.get("body", {})
-            verified = (
+            token_verified = (
                 verification["status"] == 403
                 and body.get("error") == "invalid_token"
-                and body.get("reason") in {"revoked", "integration_disabled"}
+                and body.get("reason") == "revoked"
                 and bool(body.get("provider_request_id"))
+            )
+            result.update(
+                token_revocation_verified=token_verified,
+                revocation_verification_request_id=body.get("provider_request_id")
+                if token_verified
+                else None,
+            )
+            disabled_verified = False
+            if event.get("disable_integration") is True:
+                guarded_registry_write(
+                    event,
+                    {
+                        "Put": {
+                            "TableName": os.environ["TOKEN_TABLE"],
+                            "Item": {
+                                "token_hash": {"S": "integration:enabled"},
+                                "enabled": {"BOOL": False},
+                            },
+                        }
+                    },
+                )
+                result["integration_configured_disabled"] = True
+                verification = probe()
+                body = verification.get("body", {})
+                disabled_verified = (
+                    verification["status"] == 403
+                    and body.get("error") == "invalid_token"
+                    and body.get("reason") == "integration_disabled"
+                    and bool(body.get("provider_request_id"))
+                )
+                result["integration_disabled"] = disabled_verified
+            verified = bool(
+                token_verified and (not event.get("disable_integration") or disabled_verified)
             )
             result.update(
                 status="verified" if verified else "unverified",
@@ -231,7 +288,15 @@ def restore(
     # Security-owned recovery claims are explicitly distinguished from workload claims.
     for kind in ["EXPECTED_ACTION", "INTENT_CREATED"]:
         emit(new_event("responder", kind, **fields))
-    table.put_item(Item={"token_hash": "integration:enabled", "enabled": True})
+    guarded_registry_write(
+        event,
+        {
+            "Put": {
+                "TableName": os.environ["TOKEN_TABLE"],
+                "Item": {"token_hash": {"S": "integration:enabled"}, "enabled": {"BOOL": True}},
+            }
+        },
+    )
     url = os.environ["SAAS_URL"]
     if scope == "records:export":
         url = url.rsplit("/", 1)[0] + "/export"
@@ -271,3 +336,20 @@ def restore(
     finally:
         if not verified:
             table.put_item(Item={"token_hash": "integration:enabled", "enabled": False})
+
+
+def guarded_registry_write(event: dict[str, Any], change: dict[str, Any]) -> None:
+    """Atomically refuse a registry mutation if the approved decision has been superseded."""
+    boto3.client("dynamodb", config=SDK_CONFIG).transact_write_items(
+        TransactItems=[
+            {
+                "ConditionCheck": {
+                    "TableName": os.environ["DECISION_TABLE"],
+                    "Key": {"case_id": {"S": event["case_id"]}, "decision_id": {"S": "CURRENT"}},
+                    "ConditionExpression": "current_decision_id=:decision",
+                    "ExpressionAttributeValues": {":decision": {"S": event["decision_id"]}},
+                }
+            },
+            change,
+        ]
+    )

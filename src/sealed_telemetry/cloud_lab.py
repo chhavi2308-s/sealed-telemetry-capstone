@@ -220,6 +220,7 @@ def saas(event: dict[str, Any], context: Any) -> dict[str, Any]:
         operation=operation,
         resource_pseudonym="synthetic-records",
         outcome="success" if valid else "denied",
+        trace_context={"authorization_state": "accepted" if valid else reason},
         invocation_id=headers.get("x-invocation-id"),
         action_id=headers.get("x-action-id"),
         provider_request_id=str(uuid4()),

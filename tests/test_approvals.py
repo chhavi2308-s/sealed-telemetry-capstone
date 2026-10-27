@@ -25,11 +25,13 @@ def approval_store(monkeypatch):
             AttributeDefinitions=[{"AttributeName": "approval_id", "AttributeType": "S"}],
         )
         finding = {
+            "case_id": "run:case",
             "decision_id": "decision",
             "run_id": "run",
             "state": "SUSPICIOUS",
             "credential_fingerprint": "a" * 64,
         }
+        seed_case(monkeypatch, finding)
         approval_id = broker(
             {
                 "finding": finding,
@@ -65,6 +67,15 @@ def test_callback_proof_and_no_task_token_disclosure(approval_store):
         assert api(event, None)["statusCode"] == 200
         assert api(event, None)["statusCode"] == 200
         sfn.send_task_success.assert_called_once()
+        duplicate = broker(
+            {
+                "finding": finding,
+                "task_token": "secret-callback-token",
+                "execution_arn": "arn:aws:states:us-east-1:123456789012:execution:lab:test",
+            },
+            None,
+        )
+        assert duplicate["approval_id"] == event["pathParameters"]["approval_id"]
         assert emit.call_args_list[0].args[0] == emit.call_args_list[1].args[0]
         proof = json.loads(sfn.send_task_success.call_args.kwargs["output"])
         verify_proof({**finding, **proof})
@@ -82,3 +93,74 @@ def test_operator_identity_and_boolean_required(approval_store):
     assert api({**event, "body": '{"approved":"true"}'}, None)["statusCode"] == 400
     with pytest.raises((ValueError, KeyError)):
         verify_proof({"approved": True, "approval_id": "invented"})
+
+
+def seed_case(monkeypatch, finding):
+    monkeypatch.setenv("DECISION_TABLE", "decisions")
+    boto3.client("dynamodb").create_table(
+        TableName="decisions",
+        BillingMode="PAY_PER_REQUEST",
+        KeySchema=[
+            {"AttributeName": "case_id", "KeyType": "HASH"},
+            {"AttributeName": "decision_id", "KeyType": "RANGE"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "case_id", "AttributeType": "S"},
+            {"AttributeName": "decision_id", "AttributeType": "S"},
+        ],
+    )
+    boto3.resource("dynamodb").Table("decisions").put_item(
+        Item={
+            "case_id": finding["case_id"],
+            "decision_id": "CURRENT",
+            "current_decision_id": finding["decision_id"],
+            "body": json.dumps(finding),
+        }
+    )
+
+
+def test_revised_finding_cannot_be_approved(approval_store):
+    finding, event = approval_store
+    boto3.resource("dynamodb").Table("decisions").update_item(
+        Key={"case_id": finding["case_id"], "decision_id": "CURRENT"},
+        UpdateExpression="SET current_decision_id=:new",
+        ExpressionAttributeValues={":new": "revised"},
+    )
+    with patch("sealed_telemetry.approvals.emit") as emit:
+        assert api(event, None)["statusCode"] == 409
+        emit.assert_not_called()
+
+
+def test_revised_decision_atomically_blocks_registry_effect(approval_store, monkeypatch):
+    from botocore.exceptions import ClientError
+
+    from sealed_telemetry.cloud_response import guarded_registry_write
+
+    finding, _ = approval_store
+    monkeypatch.setenv("TOKEN_TABLE", "tokens")
+    boto3.client("dynamodb").create_table(
+        TableName="tokens",
+        BillingMode="PAY_PER_REQUEST",
+        KeySchema=[{"AttributeName": "token_hash", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "token_hash", "AttributeType": "S"}],
+    )
+    table = boto3.resource("dynamodb").Table("tokens")
+    table.put_item(Item={"token_hash": "synthetic", "revoked": False})
+    boto3.resource("dynamodb").Table("decisions").update_item(
+        Key={"case_id": finding["case_id"], "decision_id": "CURRENT"},
+        UpdateExpression="SET current_decision_id=:new",
+        ExpressionAttributeValues={":new": "revised"},
+    )
+    with pytest.raises(ClientError):
+        guarded_registry_write(
+            finding,
+            {
+                "Update": {
+                    "TableName": "tokens",
+                    "Key": {"token_hash": {"S": "synthetic"}},
+                    "UpdateExpression": "SET revoked=:yes",
+                    "ExpressionAttributeValues": {":yes": {"BOOL": True}},
+                }
+            },
+        )
+    assert table.get_item(Key={"token_hash": "synthetic"})["Item"]["revoked"] is False

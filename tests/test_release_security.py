@@ -9,6 +9,7 @@ from sealed_telemetry.schema import digest, timestamp, utcnow
 def test_concurrent_response_lease_prevents_second_effect(monkeypatch):
     monkeypatch.setenv("RESPONSE_TABLE", "responses")
     event = {
+        "case_id": "run:case",
         "state": "SUSPICIOUS",
         "approved": True,
         "approval_id": "approval",

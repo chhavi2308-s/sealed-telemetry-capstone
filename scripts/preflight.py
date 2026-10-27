@@ -45,7 +45,12 @@ def inspect(session: Any, args: Any) -> dict[str, Any]:
     )
     if available["RegionOptStatus"] not in {"ENABLED", "ENABLED_BY_DEFAULT"}:
         raise ValueError("Target region is not enabled")
-    unavailable = [s for s in SERVICES if args.region not in session.get_available_regions(s)]
+    services = (
+        ["lambda", "logs", "s3", "cloudformation", "sqs", "cloudtrail"]
+        if getattr(args, "deployment_profile", "lab") == "workload"
+        else SERVICES
+    )
+    unavailable = [s for s in services if args.region not in session.get_available_regions(s)]
     if unavailable:
         raise ValueError("Regional services unsupported: " + ",".join(unavailable))
     budgets = session.client("budgets", config=SDK_CONFIG)
@@ -63,8 +68,12 @@ def inspect(session: Any, args: Any) -> dict[str, Any]:
     amount = float(budget["BudgetLimit"]["Amount"])
     if budget["BudgetLimit"]["Unit"] != "USD" or amount > args.max_budget_usd or not subscribers:
         raise ValueError("Approved USD budget with subscribers required")
-    logging = session.client("apigateway", config=SDK_CONFIG).get_account().get("cloudwatchRoleArn")
-    if not logging:
+    logging = None
+    if getattr(args, "deployment_profile", "lab") != "workload":
+        logging = (
+            session.client("apigateway", config=SDK_CONFIG).get_account().get("cloudwatchRoleArn")
+        )
+    if getattr(args, "deployment_profile", "lab") != "workload" and not logging:
         raise ValueError(
             "Regional API Gateway logging role missing; account-wide change requires approval"
         )
@@ -88,6 +97,29 @@ def inspect(session: Any, args: Any) -> dict[str, Any]:
         RoleName=identity["Arn"].split("/")[1]
     )["Role"]["Arn"]
     permission_plan = json.loads(args.permission_plan.read_text(encoding="utf-8"))
+    inventory_name = (
+        "template"
+        if getattr(args, "deployment_profile", "lab") == "lab"
+        else args.deployment_profile
+    )
+    inventory = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "docs/release"
+            / (inventory_name + "-inventory.json")
+        ).read_text(encoding="utf-8")
+    )
+    iam_summary = session.client("iam", config=SDK_CONFIG).get_account_summary()["SummaryMap"]
+    required_roles = inventory["counts"].get("AWS::IAM::Role", 0)
+    if iam_summary["Roles"] + required_roles > iam_summary["RolesQuota"]:
+        raise ValueError("Insufficient IAM role quota")
+    lambda_limits = session.client("lambda", config=SDK_CONFIG).get_account_settings()[
+        "AccountLimit"
+    ]
+    if inventory_name != "workload" and lambda_limits["UnreservedConcurrentExecutions"] <= 100:
+        raise ValueError(
+            "Reserved detector concurrency needs at least 101 currently unreserved units"
+        )
     if (
         permission_plan.get("account") != args.account
         or permission_plan.get("region") != args.region
@@ -96,12 +128,29 @@ def inspect(session: Any, args: Any) -> dict[str, Any]:
     checks = permission_plan.get("checks", [])
     if not checks:
         raise ValueError("Explicit reviewed permission checks required")
+    service_role = permission_plan.get("cloudformation_service_role")
+    if (
+        not isinstance(service_role, str)
+        or (":iam::" + args.account + ":role/") not in service_role
+    ):
+        raise ValueError("Same-account CloudFormation service role ARN required in permission plan")
+    service_role_details = session.client("iam", config=SDK_CONFIG).get_role(
+        RoleName=service_role.rsplit("/", 1)[1]
+    )["Role"]
+    if service_role_details["Arn"] != service_role:
+        raise ValueError("CloudFormation service role identity mismatch")
     evaluations = []
     iam = session.client("iam", config=SDK_CONFIG)
     for check in checks:
         if not check.get("ActionNames") or not check.get("ResourceArns"):
             raise ValueError("Permission check requires actions and resource ARNs")
-        result = iam.simulate_principal_policy(PolicySourceArn=role, **check)
+        check = dict(check)
+        source = check.pop("policy_source", "caller")
+        if source not in {"caller", "cloudformation"}:
+            raise ValueError("unknown permission-check principal")
+        result = iam.simulate_principal_policy(
+            PolicySourceArn=service_role if source == "cloudformation" else role, **check
+        )
         evaluations.extend(result["EvaluationResults"])
         if result.get("IsTruncated"):
             raise ValueError("Permission simulation truncated; split plan checks")
@@ -113,12 +162,17 @@ def inspect(session: Any, args: Any) -> dict[str, Any]:
         "region": args.region,
         "principal": identity["Arn"],
         "role": role,
+        "cloudformation_service_role": service_role,
+        "service_role_trust_policy": service_role_details["AssumeRolePolicyDocument"],
+        "iam_roles_required": required_roles,
+        "lambda_account_limits": lambda_limits,
         "temporary_credentials": True,
         "budget_name": args.budget_name,
         "budget_limit_usd": amount,
         "api_gateway_logging_role": logging,
         "artifact_bucket": args.artifact_bucket,
-        "regional_services": SERVICES,
+        "regional_services": services,
+        "deployment_profile": getattr(args, "deployment_profile", "lab"),
         "permission_evaluations": evaluations,
         "permission_denials_or_missing_context": len(denied),
         "preflight_passed": not denied,
@@ -133,6 +187,9 @@ def inspect(session: Any, args: Any) -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--deployment-profile", choices=["lab", "security", "workload"], default="lab"
+    )
     parser.add_argument("--account", required=True)
     parser.add_argument("--region", required=True)
     parser.add_argument("--budget-name", required=True)

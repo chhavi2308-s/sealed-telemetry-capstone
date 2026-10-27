@@ -51,6 +51,7 @@ mypy-boto3-sts==1.43.94
 mypy-boto3-xray==1.43.115
 networkx==3.7
 packaging==26.3
+pip==26.2.2
 pycparser==3.12
 pydantic==2.13.5
 pydantic_core==2.46.5

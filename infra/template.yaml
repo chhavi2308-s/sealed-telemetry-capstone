@@ -3116,6 +3116,9 @@
             },
             "ISSUER_FUNCTION": {
               "Ref": "IssuerFunction"
+            },
+            "DECISION_TABLE": {
+              "Ref": "Decisions"
             }
           }
         }
@@ -3261,6 +3264,30 @@
                   "Arn"
                 ]
               }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:GetItem"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "Decisions",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:ConditionCheckItem"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "Decisions",
+                  "Arn"
+                ]
+              }
             }
           ]
         }
@@ -3401,7 +3428,8 @@
                 "approved_by.$": "$.approval.approved_by",
                 "approval_id.$": "$.approval.approval_id",
                 "disable_integration.$": "$.approval.disable_integration",
-                "action.$": "$.approval.action"
+                "action.$": "$.approval.action",
+                "case_id.$": "$.case_id"
               }
             },
             "Verify": {
@@ -6372,6 +6400,9 @@
             },
             "INTAKE_URL": {
               "Fn::Sub": "https://${IntakeApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/lab/evidence"
+            },
+            "DECISION_TABLE": {
+              "Ref": "Decisions"
             }
           }
         },
@@ -6524,6 +6555,18 @@
               ],
               "Resource": {
                 "Fn::Sub": "${ApprovalApiLogs.Arn}:*"
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:GetItem"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "Decisions",
+                  "Arn"
+                ]
               }
             }
           ]
