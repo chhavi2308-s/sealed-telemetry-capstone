@@ -16,6 +16,8 @@ SOURCE_TYPES = {
     "health": {"SOURCE_HEALTH"},
     "responder": {"RESPONSE_ACTION"},
     "platform": {"LAMBDA_PLATFORM", "API_INGRESS"},
+    "cloudtrail": {"AWS_API"},
+    "approval": {"APPROVAL_DECISION"},
 }
 
 
@@ -64,6 +66,7 @@ class Evidence:
     schema_version: str = "1"
     health_for_source: str | None = None
     source_health: str | None = None
+    trace_context: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -85,6 +88,20 @@ class Evidence:
         if event.schema_version != "1" or event.outcome not in {"success", "denied", "failure"}:
             raise ValueError("unsupported version/outcome")
         for name, value in raw.items():
+            if name == "trace_context":
+                if value is not None and (
+                    not isinstance(value, dict)
+                    or len(value) > 16
+                    or any(
+                        not isinstance(k, str)
+                        or len(k) > 64
+                        or not isinstance(v, str)
+                        or len(v) > 1024
+                        for k, v in value.items()
+                    )
+                ):
+                    raise ValueError("invalid trace context")
+                continue
             if value is not None and (not isinstance(value, str) or not value or len(value) > 256):
                 raise ValueError(f"invalid field: {name}")
         if re.fullmatch(r"[a-f0-9]{64}", event.credential_fingerprint) is None:

@@ -42,7 +42,9 @@
         "provider",
         "health",
         "responder",
-        "platform"
+        "platform",
+        "cloudtrail",
+        "approval"
       ]
     },
     "event_type": {
@@ -132,6 +134,20 @@
       ],
       "maxLength": 256,
       "minLength": 1
+    },
+    "trace_context": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "maxProperties": 16,
+      "propertyNames": {
+        "maxLength": 64
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 1024
+      }
     }
   },
   "allOf": [
@@ -312,6 +328,42 @@
           },
           "source_health": {
             "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source_id": {
+            "const": "cloudtrail"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "enum": [
+              "AWS_API"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source_id": {
+            "const": "approval"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "enum": [
+              "APPROVAL_DECISION"
+            ]
           }
         }
       }

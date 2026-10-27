@@ -4,11 +4,12 @@ import hashlib
 import json
 import logging
 import os
+from datetime import UTC, datetime
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from sealed_telemetry.aws_support import SDK_CONFIG
 from sealed_telemetry.reconciliation import Policy
@@ -25,19 +26,30 @@ def response(status: int, body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def source_for_principal(principal: str, roles: dict[str, str]) -> str:
-    """Match full IAM role or its STS session ARN, including partition and account."""
-    for source, role in roles.items():
-        if principal == role:
-            return source
-        prefix, account, role_path = (
-            role.split(":iam::")[0],
-            role.split(":")[4],
-            role.split(":role/")[-1],
-        )
-        sts_prefix = f"{prefix}:sts::{account}:assumed-role/{role_path.split('/')[-1]}/"
-        if principal.startswith(sts_prefix) and len(principal) > len(sts_prefix):
-            return source
+def source_for_principal(principal: str, roles: dict[str, str | list[str]]) -> str:
+    """Bind a principal to one configured source, including cross-account STS sessions."""
+    if not isinstance(principal, str):
+        raise ValueError("invalid principal")
+    for source, configured in roles.items():
+        for role in [configured] if isinstance(configured, str) else configured:
+            if not isinstance(role, str) or not role.startswith("arn:"):
+                continue
+            if principal == role:
+                return source
+            if ":iam::" not in role or ":role/" not in role:
+                continue
+            prefix, account, name = (
+                role.split(":iam::")[0],
+                role.split(":")[4],
+                role.rsplit("/", 1)[1],
+            )
+            stem = f"{prefix}:sts::{account}:assumed-role/{name}/"
+            if (
+                principal.startswith(stem)
+                and principal[len(stem) :]
+                and "/" not in principal[len(stem) :]
+            ):
+                return source
     raise ValueError("unknown authenticated principal")
 
 
@@ -103,7 +115,7 @@ def persist(envelope: dict[str, Any]) -> None:
     s3 = boto3.client("s3", config=SDK_CONFIG)
     bucket = os.environ["ARCHIVE_BUCKET"]
     # Global event UUID avoids unsafe producer-controlled path characters.
-    key = f"evidence/{event.event_id}.json"
+    key = f"evidence/{event.source_id}/{event.event_id}.json"
     try:
         stored = s3.put_object(
             Bucket=bucket,
@@ -126,7 +138,8 @@ def persist(envelope: dict[str, Any]) -> None:
         version = previous.get("VersionId", "unversioned")
     table = boto3.resource("dynamodb", config=SDK_CONFIG).Table(os.environ["EVENT_TABLE"])
     item = {
-        "event_id": event.event_id,
+        "event_id": event.source_id + ":" + event.event_id,
+        "raw_event_id": event.event_id,
         "run_id": event.run_id,
         "event_time_utc": event.event_time_utc,
         "source_id": event.source_id,
@@ -141,7 +154,9 @@ def persist(envelope: dict[str, Any]) -> None:
     except ClientError as exc:
         if exc.response["Error"]["Code"] != "ConditionalCheckFailedException":
             raise
-        existing = table.get_item(Key={"event_id": event.event_id}, ConsistentRead=True)["Item"]
+        existing = table.get_item(
+            Key={"event_id": event.source_id + ":" + event.event_id}, ConsistentRead=True
+        )["Item"]
         if existing["canonical_hash"] != item["canonical_hash"]:
             raise ValueError("index content conflict") from exc
     operational = boto3.resource("dynamodb", config=SDK_CONFIG)
@@ -150,17 +165,22 @@ def persist(envelope: dict[str, Any]) -> None:
             operational.Table(os.environ["HEALTH_TABLE"]).put_item(
                 Item={
                     "source_id": event.health_for_source,
-                    "checked_at": event.event_time_utc,
+                    "checked_at": timestamp(event.event_time_utc).isoformat(),
                     "state": event.source_health,
                     "event_id": event.event_id,
                 },
                 ConditionExpression="attribute_not_exists(checked_at) OR checked_at <= :checked",
-                ExpressionAttributeValues={":checked": event.event_time_utc},
+                ExpressionAttributeValues={":checked": timestamp(event.event_time_utc).isoformat()},
             )
         except ClientError as exc:
             if exc.response["Error"]["Code"] != "ConditionalCheckFailedException":
                 raise
-    elif event.source_id != "responder":
+    elif event.event_type in {
+        "EXPECTED_ACTION",
+        "INTENT_CREATED",
+        "PROVIDER_ACTION",
+        "RESPONSE_ACTION",
+    }:
         policy = Policy(**json.loads(os.environ.get("POLICY_JSON", "{}")))
         activation_seconds = max(
             900,
@@ -183,9 +203,32 @@ def normalizer(event: dict[str, Any], context: Any) -> dict[str, Any]:
     failures = []
     for record in event["Records"]:
         try:
-            persist(json.loads(record["body"]))
-        except (ClientError, ValueError, KeyError, TypeError):
+            routing = json.loads(os.environ["QUEUE_SOURCES"])
+            source = routing.get(record.get("eventSourceARN"))
+            if source is None:
+                raise ValueError("untrusted queue origin")
+            envelope = json.loads(record["body"])
+            if source != "collector" and envelope["receipt"]["authenticated_source"] != source:
+                raise ValueError("queue cannot assert another evidence source")
+            if source != "collector":
+                envelope["receipt"]["collector_received_at_utc"] = datetime.fromtimestamp(
+                    int(record["attributes"]["SentTimestamp"]) / 1000, UTC
+                ).isoformat()
+                envelope["receipt"]["queue_source_arn"] = record["eventSourceARN"]
+                envelope["receipt"]["trust_tier"] = (
+                    "corroborative"
+                    if source == "platform"
+                    else "independent_provider"
+                    if source == "provider"
+                    else "aws_control_plane"
+                )
+            persist(envelope)
+        except (BotoCoreError, ClientError, ValueError, KeyError, TypeError, AttributeError) as exc:
             # Never log the body or credentials. Poison messages eventually enter the DLQ.
-            LOG.exception("evidence_processing_failed message_id=%s", record["messageId"])
+            LOG.error(
+                "evidence_processing_failed message_id=%s error_type=%s",
+                record["messageId"],
+                type(exc).__name__,
+            )
             failures.append({"itemIdentifier": record["messageId"]})
     return {"batchItemFailures": failures}

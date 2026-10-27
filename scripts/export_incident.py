@@ -60,7 +60,7 @@ def export(
                 "archive_version": item["archive_version"],
             }
         )
-        q = {"KeyConditionExpression": Key("case_id").eq(raw["run_id"] + ":" + item["event_id"])}
+        q = {"KeyConditionExpression": Key("case_id").eq(raw["run_id"] + ":" + raw["event_id"])}
         while True:
             page = decisions.query(**q)
             history.extend(

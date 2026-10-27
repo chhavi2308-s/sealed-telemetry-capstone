@@ -69,10 +69,24 @@ def https_json(
         ) as result:
             return {"status": result.status, "body": json.loads(result.read())}
     except HTTPError as exc:
-        return {"status": exc.code, "body": {"error": "remote_rejected"}}
+        try:
+            parsed = json.loads(exc.read(16384))
+            body = {
+                key: parsed[key]
+                for key in ("error", "reason", "provider_request_id")
+                if key in parsed
+            }
+        except (ValueError, TypeError):
+            body = {"error": "remote_rejected"}
+        return {"status": exc.code, "body": body}
 
 
 def emit(event: Any) -> None:
+    if event.source_id == "provider" and os.environ.get("PROVIDER_QUEUE_URL"):
+        from sealed_telemetry.telemetry import publish
+
+        publish([event], os.environ["PROVIDER_QUEUE_URL"])
+        return
     result = https_json(os.environ["INTAKE_URL"], event.to_dict(), signed=True)
     if result["status"] != 202:
         raise RuntimeError("evidence intake rejected event")
@@ -100,7 +114,7 @@ def issuer(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if not is_http and request.get("operation") != "issue":
         raise ValueError("unsupported issuer operation")
     scope = request.get("scope", "records:read")
-    if scope not in {"records:read", "records:export"}:
+    if not isinstance(scope, str) or scope not in {"records:read", "records:export"}:
         return response(400, {"error": "invalid_scope"}) if is_http else {"error": "invalid_scope"}
     token, token_id = secrets.token_urlsafe(32), str(uuid4())
     secret = boto3.client("secretsmanager", config=SDK_CONFIG).get_secret_value(
@@ -163,6 +177,19 @@ def saas(event: dict[str, Any], context: Any) -> dict[str, Any]:
         run_id = str(UUID(headers["x-run-id"])) if headers.get("x-run-id") else str(uuid4())
     except ValueError:
         return response(400, {"error": "lab_run_id_required"})
+    reason = (
+        "unknown_token"
+        if not row
+        else "integration_disabled"
+        if not integration["enabled"]
+        else "revoked"
+        if row["revoked"]
+        else "expired"
+        if timestamp(row["expires_at"]) <= timestamp(utcnow())
+        else "wrong_audience"
+        if row["audience"] != "synthetic-saas"
+        else "invalid_scope"
+    )
     audit = new_event(
         "provider",
         "PROVIDER_ACTION",
@@ -193,6 +220,7 @@ def saas(event: dict[str, Any], context: Any) -> dict[str, Any]:
         {
             "provider_request_id": audit.provider_request_id,
             "data": [{"id": "synthetic-001", "value": "lab-only"}] if valid else [],
+            **({"error": "invalid_token", "reason": reason} if not valid else {}),
         },
     )
 

@@ -21,6 +21,20 @@
       "Type": "String",
       "Default": "{}",
       "Description": "JSON iber Policy fields from measured benign calibration; empty uses provisional lab defaults"
+    },
+    "EnableSupplementary": {
+      "Type": "String",
+      "Default": "false",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Description": "Enable source subscriptions and chargeable selected CloudTrail data events after approval"
+    },
+    "OperatorPrincipalArn": {
+      "Type": "String",
+      "Default": "",
+      "Description": "Exact IAM operator role ARN; empty disables operator access"
     }
   },
   "Globals": {
@@ -649,7 +663,7 @@
             },
             "SOURCE_ROLES": {
               "Fn::Sub": [
-                "{\"app\":\"${A}\",\"gateway\":\"${G}\",\"provider\":\"${P}\",\"responder\":\"${R}\",\"health\":\"${H}\"}",
+                "{\"app\":\"${A}\",\"gateway\":\"${G}\",\"responder\":\"${R}\",\"health\":\"${H}\",\"approval\":\"${O}\"}",
                 {
                   "A": {
                     "Fn::GetAtt": [
@@ -663,12 +677,6 @@
                       "Arn"
                     ]
                   },
-                  "P": {
-                    "Fn::GetAtt": [
-                      "AuditForwarderRole",
-                      "Arn"
-                    ]
-                  },
                   "R": {
                     "Fn::GetAtt": [
                       "ResponderRole",
@@ -678,6 +686,12 @@
                   "H": {
                     "Fn::GetAtt": [
                       "HealthRole",
+                      "Arn"
+                    ]
+                  },
+                  "O": {
+                    "Fn::GetAtt": [
+                      "ApprovalApiRole",
                       "Arn"
                     ]
                   }
@@ -736,6 +750,37 @@
             },
             "POLICY_JSON": {
               "Ref": "ReconciliationPolicy"
+            },
+            "QUEUE_SOURCES": {
+              "Fn::Sub": [
+                "{\"${Q}\":\"collector\",\"${PlatformQueue}\":\"platform\",\"${CloudTrailQueue}\":\"cloudtrail\",\"${ProviderQueue}\":\"provider\"}",
+                {
+                  "Q": {
+                    "Fn::GetAtt": [
+                      "EvidenceQueue",
+                      "Arn"
+                    ]
+                  },
+                  "PlatformQueue": {
+                    "Fn::GetAtt": [
+                      "PlatformQueue",
+                      "Arn"
+                    ]
+                  },
+                  "CloudTrailQueue": {
+                    "Fn::GetAtt": [
+                      "CloudTrailQueue",
+                      "Arn"
+                    ]
+                  },
+                  "ProviderQueue": {
+                    "Fn::GetAtt": [
+                      "ProviderQueue",
+                      "Arn"
+                    ]
+                  }
+                }
+              ]
             }
           }
         },
@@ -746,6 +791,51 @@
               "Queue": {
                 "Fn::GetAtt": [
                   "EvidenceQueue",
+                  "Arn"
+                ]
+              },
+              "BatchSize": 10,
+              "FunctionResponseTypes": [
+                "ReportBatchItemFailures"
+              ]
+            }
+          },
+          "PlatformQueue": {
+            "Type": "SQS",
+            "Properties": {
+              "Queue": {
+                "Fn::GetAtt": [
+                  "PlatformQueue",
+                  "Arn"
+                ]
+              },
+              "BatchSize": 10,
+              "FunctionResponseTypes": [
+                "ReportBatchItemFailures"
+              ]
+            }
+          },
+          "CloudTrailQueue": {
+            "Type": "SQS",
+            "Properties": {
+              "Queue": {
+                "Fn::GetAtt": [
+                  "CloudTrailQueue",
+                  "Arn"
+                ]
+              },
+              "BatchSize": 10,
+              "FunctionResponseTypes": [
+                "ReportBatchItemFailures"
+              ]
+            }
+          },
+          "ProviderQueue": {
+            "Type": "SQS",
+            "Properties": {
+              "Queue": {
+                "Fn::GetAtt": [
+                  "ProviderQueue",
                   "Arn"
                 ]
               },
@@ -886,6 +976,9 @@
             },
             "OUTBOX_TABLE": {
               "Ref": "ProviderOutbox"
+            },
+            "PROVIDER_QUEUE_URL": {
+              "Ref": "ProviderQueue"
             }
           }
         },
@@ -1176,6 +1269,42 @@
                   ]
                 }
               ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes"
+              ],
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "PlatformQueue",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::GetAtt": [
+                    "CloudTrailQueue",
+                    "Arn"
+                  ]
+                }
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "ProviderQueue",
+                  "Arn"
+                ]
+              }
             }
           ]
         }
@@ -1285,15 +1414,6 @@
             {
               "Effect": "Allow",
               "Action": [
-                "execute-api:Invoke"
-              ],
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${IntakeApi}/lab/POST/evidence"
-              }
-            },
-            {
-              "Effect": "Allow",
-              "Action": [
                 "dynamodb:DescribeStream",
                 "dynamodb:GetRecords",
                 "dynamodb:GetShardIterator"
@@ -1337,6 +1457,18 @@
               "Resource": {
                 "Fn::GetAtt": [
                   "ProviderOutbox",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:SendMessage"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "ProviderQueue",
                   "Arn"
                 ]
               }
@@ -1876,6 +2008,12 @@
             },
             "SAAS_URL": {
               "Fn::Sub": "https://${SaasApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/lab/records"
+            },
+            "APPROVAL_TABLE": {
+              "Ref": "Approvals"
+            },
+            "RESPONSE_HISTORY_TABLE": {
+              "Ref": "ResponseHistory"
             }
           }
         }
@@ -1958,6 +2096,30 @@
               "Resource": {
                 "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${IntakeApi}/lab/POST/evidence"
               }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:GetItem"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "Approvals",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:PutItem"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "ResponseHistory",
+                  "Arn"
+                ]
+              }
             }
           ]
         }
@@ -1989,12 +2151,20 @@
                   "Action": [
                     "lambda:InvokeFunction"
                   ],
-                  "Resource": {
-                    "Fn::GetAtt": [
-                      "ResponderFunction",
-                      "Arn"
-                    ]
-                  }
+                  "Resource": [
+                    {
+                      "Fn::GetAtt": [
+                        "ResponderFunction",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "ApprovalBrokerFunction",
+                        "Arn"
+                      ]
+                    }
+                  ]
                 }
               ]
             }
@@ -2012,27 +2182,18 @@
           ]
         },
         "Definition": {
-          "StartAt": "ApprovalGate",
+          "StartAt": "RequestApproval",
           "States": {
             "ApprovalGate": {
               "Type": "Choice",
               "Choices": [
                 {
-                  "Variable": "$.approved",
+                  "Variable": "$.approval.approved",
                   "BooleanEquals": true,
-                  "Next": "Contain"
+                  "Next": "InitializeRetry"
                 }
               ],
-              "Default": "ApprovalRequired"
-            },
-            "ApprovalRequired": {
-              "Type": "Pass",
-              "Result": {
-                "status": "approval_required",
-                "verified_at": null
-              },
-              "ResultPath": "$.response",
-              "End": true
+              "Default": "Rejected"
             },
             "Contain": {
               "Type": "Task",
@@ -2055,7 +2216,17 @@
                   "BackoffRate": 2
                 }
               ],
-              "Next": "Verify"
+              "Next": "Verify",
+              "Parameters": {
+                "decision_id.$": "$.decision_id",
+                "run_id.$": "$.run_id",
+                "state.$": "$.state",
+                "credential_fingerprint.$": "$.credential_fingerprint",
+                "approved.$": "$.approval.approved",
+                "approved_by.$": "$.approval.approved_by",
+                "approval_id.$": "$.approval.approval_id",
+                "disable_integration.$": "$.approval.disable_integration"
+              }
             },
             "Verify": {
               "Type": "Choice",
@@ -2064,6 +2235,19 @@
                   "Variable": "$.response.status",
                   "StringEquals": "verified",
                   "Next": "Verified"
+                },
+                {
+                  "And": [
+                    {
+                      "Variable": "$.response.retryable",
+                      "BooleanEquals": true
+                    },
+                    {
+                      "Variable": "$.retry_count",
+                      "NumericLessThan": 5
+                    }
+                  ],
+                  "Next": "RetryWait"
                 }
               ],
               "Default": "Unverified"
@@ -2074,45 +2258,69 @@
             "Unverified": {
               "Type": "Fail",
               "Error": "ContainmentNotVerified"
-            }
-          }
-        }
-      }
-    },
-    "FindingRouteRole": {
-      "Type": "AWS::IAM::Role",
-      "Properties": {
-        "AssumeRolePolicyDocument": {
-          "Version": "2012-10-17",
-          "Statement": [
-            {
-              "Effect": "Allow",
-              "Principal": {
-                "Service": "events.amazonaws.com"
+            },
+            "RequestApproval": {
+              "Type": "Task",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:states:::lambda:invoke.waitForTaskToken"
               },
-              "Action": "sts:AssumeRole"
-            }
-          ]
-        },
-        "Policies": [
-          {
-            "PolicyName": "StartPolicyGate",
-            "PolicyDocument": {
-              "Version": "2012-10-17",
-              "Statement": [
+              "Parameters": {
+                "FunctionName": {
+                  "Ref": "ApprovalBrokerFunction"
+                },
+                "Payload": {
+                  "task_token.$": "$$.Task.Token",
+                  "execution_arn.$": "$$.Execution.Id",
+                  "finding.$": "$"
+                }
+              },
+              "TimeoutSeconds": 3600,
+              "ResultPath": "$.approval",
+              "Next": "ApprovalGate",
+              "Catch": [
                 {
-                  "Effect": "Allow",
-                  "Action": [
-                    "states:StartExecution"
+                  "ErrorEquals": [
+                    "States.Timeout"
                   ],
-                  "Resource": {
-                    "Ref": "ResponseWorkflow"
-                  }
+                  "Next": "ApprovalExpired"
                 }
               ]
+            },
+            "ApprovalExpired": {
+              "Type": "Fail",
+              "Error": "ApprovalExpired"
+            },
+            "Rejected": {
+              "Type": "Succeed"
+            },
+            "InitializeRetry": {
+              "Type": "Pass",
+              "Result": 0,
+              "ResultPath": "$.retry_count",
+              "Next": "Contain"
+            },
+            "RetryWait": {
+              "Type": "Wait",
+              "Seconds": 15,
+              "Next": "IncrementRetry"
+            },
+            "IncrementRetry": {
+              "Type": "Pass",
+              "Parameters": {
+                "count.$": "States.MathAdd($.retry_count, 1)"
+              },
+              "ResultPath": "$.counter",
+              "Next": "SetRetry"
+            },
+            "SetRetry": {
+              "Type": "Pass",
+              "InputPath": "$.counter.count",
+              "ResultPath": "$.retry_count",
+              "Next": "Contain"
             }
-          }
-        ]
+          },
+          "TimeoutSeconds": 4500
+        }
       }
     },
     "FindingRoute": {
@@ -2134,11 +2342,8 @@
           {
             "Id": "ResponsePolicy",
             "Arn": {
-              "Ref": "ResponseWorkflow"
-            },
-            "RoleArn": {
               "Fn::GetAtt": [
-                "FindingRouteRole",
+                "DispatchFunction",
                 "Arn"
               ]
             },
@@ -2811,6 +3016,1908 @@
           ]
         }
       }
+    },
+    "PlatformDLQ": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "MessageRetentionPeriod": 1209600,
+        "SqsManagedSseEnabled": true
+      }
+    },
+    "CloudTrailDLQ": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "MessageRetentionPeriod": 1209600,
+        "SqsManagedSseEnabled": true
+      }
+    },
+    "TelemetryFailureQueue": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "MessageRetentionPeriod": 1209600,
+        "SqsManagedSseEnabled": true
+      }
+    },
+    "PlatformQueue": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "VisibilityTimeout": 180,
+        "MessageRetentionPeriod": 345600,
+        "SqsManagedSseEnabled": true,
+        "RedrivePolicy": {
+          "deadLetterTargetArn": {
+            "Fn::GetAtt": [
+              "PlatformDLQ",
+              "Arn"
+            ]
+          },
+          "maxReceiveCount": 5
+        }
+      }
+    },
+    "CloudTrailQueue": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "VisibilityTimeout": 180,
+        "MessageRetentionPeriod": 345600,
+        "SqsManagedSseEnabled": true,
+        "RedrivePolicy": {
+          "deadLetterTargetArn": {
+            "Fn::GetAtt": [
+              "CloudTrailDLQ",
+              "Arn"
+            ]
+          },
+          "maxReceiveCount": 5
+        }
+      }
+    },
+    "PlatformIngestRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      }
+    },
+    "PlatformIngestFunction": {
+      "Type": "AWS::Serverless::Function",
+      "Properties": {
+        "CodeUri": "../src",
+        "Handler": "sealed_telemetry.telemetry.cloudwatch",
+        "Role": {
+          "Fn::GetAtt": [
+            "PlatformIngestRole",
+            "Arn"
+          ]
+        },
+        "Timeout": 90,
+        "MemorySize": 256,
+        "Environment": {
+          "Variables": {
+            "PLATFORM_QUEUE_URL": {
+              "Ref": "PlatformQueue"
+            },
+            "ALLOWED_LOG_GROUPS": {
+              "Fn::Sub": [
+                "[\"${A}\",\"${G}\",\"${S}\",\"${W}\",\"${P}\",\"${I}\"]",
+                {
+                  "A": {
+                    "Ref": "AppLogs"
+                  },
+                  "G": {
+                    "Ref": "GatewayLogs"
+                  },
+                  "S": {
+                    "Ref": "SaasLogs"
+                  },
+                  "W": {
+                    "Ref": "WorkloadApiLogs"
+                  },
+                  "P": {
+                    "Ref": "SaasApiLogs"
+                  },
+                  "I": {
+                    "Ref": "IntakeApiLogs"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "EventInvokeConfig": {
+          "MaximumEventAgeInSeconds": 3600,
+          "MaximumRetryAttempts": 2,
+          "DestinationConfig": {
+            "OnFailure": {
+              "Type": "SQS",
+              "Destination": {
+                "Fn::GetAtt": [
+                  "TelemetryFailureQueue",
+                  "Arn"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "PlatformIngestLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${PlatformIngestFunction}"
+        },
+        "RetentionInDays": 14
+      }
+    },
+    "PlatformIngestLogPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "OwnLogs",
+        "Roles": [
+          {
+            "Ref": "PlatformIngestRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "PlatformIngestLogs",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "PlatformIngestPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "ScopedServiceAccess",
+        "Roles": [
+          {
+            "Ref": "PlatformIngestRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:SendMessage"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "PlatformQueue",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:SendMessage"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "TelemetryFailureQueue",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "PlatformPermissionAppLogs": {
+      "Type": "AWS::Lambda::Permission",
+      "Condition": "SupplementaryEnabled",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "PlatformIngestFunction"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": {
+          "Fn::Sub": "logs.${AWS::Region}.amazonaws.com"
+        },
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        },
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "AppLogs",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "SubscriptionAppLogs": {
+      "Type": "AWS::Logs::SubscriptionFilter",
+      "Condition": "SupplementaryEnabled",
+      "DependsOn": "PlatformPermissionAppLogs",
+      "Properties": {
+        "DestinationArn": {
+          "Fn::GetAtt": [
+            "PlatformIngestFunction",
+            "Arn"
+          ]
+        },
+        "FilterPattern": "",
+        "LogGroupName": {
+          "Ref": "AppLogs"
+        }
+      }
+    },
+    "PlatformPermissionGatewayLogs": {
+      "Type": "AWS::Lambda::Permission",
+      "Condition": "SupplementaryEnabled",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "PlatformIngestFunction"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": {
+          "Fn::Sub": "logs.${AWS::Region}.amazonaws.com"
+        },
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        },
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "GatewayLogs",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "SubscriptionGatewayLogs": {
+      "Type": "AWS::Logs::SubscriptionFilter",
+      "Condition": "SupplementaryEnabled",
+      "DependsOn": "PlatformPermissionGatewayLogs",
+      "Properties": {
+        "DestinationArn": {
+          "Fn::GetAtt": [
+            "PlatformIngestFunction",
+            "Arn"
+          ]
+        },
+        "FilterPattern": "",
+        "LogGroupName": {
+          "Ref": "GatewayLogs"
+        }
+      }
+    },
+    "PlatformPermissionSaasLogs": {
+      "Type": "AWS::Lambda::Permission",
+      "Condition": "SupplementaryEnabled",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "PlatformIngestFunction"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": {
+          "Fn::Sub": "logs.${AWS::Region}.amazonaws.com"
+        },
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        },
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "SaasLogs",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "SubscriptionSaasLogs": {
+      "Type": "AWS::Logs::SubscriptionFilter",
+      "Condition": "SupplementaryEnabled",
+      "DependsOn": "PlatformPermissionSaasLogs",
+      "Properties": {
+        "DestinationArn": {
+          "Fn::GetAtt": [
+            "PlatformIngestFunction",
+            "Arn"
+          ]
+        },
+        "FilterPattern": "",
+        "LogGroupName": {
+          "Ref": "SaasLogs"
+        }
+      }
+    },
+    "PlatformPermissionWorkloadApiLogs": {
+      "Type": "AWS::Lambda::Permission",
+      "Condition": "SupplementaryEnabled",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "PlatformIngestFunction"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": {
+          "Fn::Sub": "logs.${AWS::Region}.amazonaws.com"
+        },
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        },
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "WorkloadApiLogs",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "SubscriptionWorkloadApiLogs": {
+      "Type": "AWS::Logs::SubscriptionFilter",
+      "Condition": "SupplementaryEnabled",
+      "DependsOn": "PlatformPermissionWorkloadApiLogs",
+      "Properties": {
+        "DestinationArn": {
+          "Fn::GetAtt": [
+            "PlatformIngestFunction",
+            "Arn"
+          ]
+        },
+        "FilterPattern": "",
+        "LogGroupName": {
+          "Ref": "WorkloadApiLogs"
+        }
+      }
+    },
+    "PlatformPermissionSaasApiLogs": {
+      "Type": "AWS::Lambda::Permission",
+      "Condition": "SupplementaryEnabled",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "PlatformIngestFunction"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": {
+          "Fn::Sub": "logs.${AWS::Region}.amazonaws.com"
+        },
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        },
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "SaasApiLogs",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "SubscriptionSaasApiLogs": {
+      "Type": "AWS::Logs::SubscriptionFilter",
+      "Condition": "SupplementaryEnabled",
+      "DependsOn": "PlatformPermissionSaasApiLogs",
+      "Properties": {
+        "DestinationArn": {
+          "Fn::GetAtt": [
+            "PlatformIngestFunction",
+            "Arn"
+          ]
+        },
+        "FilterPattern": "",
+        "LogGroupName": {
+          "Ref": "SaasApiLogs"
+        }
+      }
+    },
+    "PlatformPermissionIntakeApiLogs": {
+      "Type": "AWS::Lambda::Permission",
+      "Condition": "SupplementaryEnabled",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "PlatformIngestFunction"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": {
+          "Fn::Sub": "logs.${AWS::Region}.amazonaws.com"
+        },
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        },
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "IntakeApiLogs",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "SubscriptionIntakeApiLogs": {
+      "Type": "AWS::Logs::SubscriptionFilter",
+      "Condition": "SupplementaryEnabled",
+      "DependsOn": "PlatformPermissionIntakeApiLogs",
+      "Properties": {
+        "DestinationArn": {
+          "Fn::GetAtt": [
+            "PlatformIngestFunction",
+            "Arn"
+          ]
+        },
+        "FilterPattern": "",
+        "LogGroupName": {
+          "Ref": "IntakeApiLogs"
+        }
+      }
+    },
+    "CloudTrailIngestRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      }
+    },
+    "CloudTrailIngestFunction": {
+      "Type": "AWS::Serverless::Function",
+      "Properties": {
+        "CodeUri": "../src",
+        "Handler": "sealed_telemetry.telemetry.cloudtrail",
+        "Role": {
+          "Fn::GetAtt": [
+            "CloudTrailIngestRole",
+            "Arn"
+          ]
+        },
+        "Timeout": 90,
+        "MemorySize": 256,
+        "Environment": {
+          "Variables": {
+            "CLOUDTRAIL_QUEUE_URL": {
+              "Ref": "CloudTrailQueue"
+            },
+            "TRAIL_BUCKET": {
+              "Fn::Sub": [
+                "${AWS::AccountId}-${AWS::Region}-sealed-audit-${Suffix}",
+                {
+                  "Suffix": {
+                    "Fn::Select": [
+                      0,
+                      {
+                        "Fn::Split": [
+                          "-",
+                          {
+                            "Fn::Select": [
+                              2,
+                              {
+                                "Fn::Split": [
+                                  "/",
+                                  {
+                                    "Ref": "AWS::StackId"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "EventInvokeConfig": {
+          "MaximumEventAgeInSeconds": 3600,
+          "MaximumRetryAttempts": 2,
+          "DestinationConfig": {
+            "OnFailure": {
+              "Type": "SQS",
+              "Destination": {
+                "Fn::GetAtt": [
+                  "TelemetryFailureQueue",
+                  "Arn"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "CloudTrailIngestLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${CloudTrailIngestFunction}"
+        },
+        "RetentionInDays": 14
+      }
+    },
+    "CloudTrailIngestLogPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "OwnLogs",
+        "Roles": [
+          {
+            "Ref": "CloudTrailIngestRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "CloudTrailIngestLogs",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "CloudTrailIngestPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "ScopedServiceAccess",
+        "Roles": [
+          {
+            "Ref": "CloudTrailIngestRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:SendMessage"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "CloudTrailQueue",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObjectVersion"
+              ],
+              "Resource": {
+                "Fn::Sub": "${TrailBucket.Arn}/AWSLogs/*"
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:SendMessage"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "TelemetryFailureQueue",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "TrailInvokePermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "CloudTrailIngestFunction"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": "s3.amazonaws.com",
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        },
+        "SourceArn": {
+          "Fn::Sub": [
+            "arn:${AWS::Partition}:s3:::${Name}",
+            {
+              "Name": {
+                "Fn::Sub": [
+                  "${AWS::AccountId}-${AWS::Region}-sealed-audit-${Suffix}",
+                  {
+                    "Suffix": {
+                      "Fn::Select": [
+                        0,
+                        {
+                          "Fn::Split": [
+                            "-",
+                            {
+                              "Fn::Select": [
+                                2,
+                                {
+                                  "Fn::Split": [
+                                    "/",
+                                    {
+                                      "Ref": "AWS::StackId"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "TrailBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DependsOn": "TrailInvokePermission",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": [
+            "${AWS::AccountId}-${AWS::Region}-sealed-audit-${Suffix}",
+            {
+              "Suffix": {
+                "Fn::Select": [
+                  0,
+                  {
+                    "Fn::Split": [
+                      "-",
+                      {
+                        "Fn::Select": [
+                          2,
+                          {
+                            "Fn::Split": [
+                              "/",
+                              {
+                                "Ref": "AWS::StackId"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "ObjectLockEnabled": true,
+        "ObjectLockConfiguration": {
+          "ObjectLockEnabled": "Enabled",
+          "Rule": {
+            "DefaultRetention": {
+              "Mode": "GOVERNANCE",
+              "Days": 1
+            }
+          }
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "NotificationConfiguration": {
+          "LambdaConfigurations": [
+            {
+              "Event": "s3:ObjectCreated:*",
+              "Function": {
+                "Fn::GetAtt": [
+                  "CloudTrailIngestFunction",
+                  "Arn"
+                ]
+              },
+              "Filter": {
+                "S3Key": {
+                  "Rules": [
+                    {
+                      "Name": "prefix",
+                      "Value": {
+                        "Fn::Sub": "AWSLogs/${AWS::AccountId}/CloudTrail/"
+                      }
+                    },
+                    {
+                      "Name": "suffix",
+                      "Value": ".json.gz"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "TrailBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "TrailBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "cloudtrail.amazonaws.com"
+              },
+              "Action": "s3:GetBucketAcl",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "TrailBucket",
+                  "Arn"
+                ]
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${AWS::StackName}-aws-api"
+                  }
+                }
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "cloudtrail.amazonaws.com"
+              },
+              "Action": "s3:PutObject",
+              "Resource": {
+                "Fn::Sub": "${TrailBucket.Arn}/AWSLogs/${AWS::AccountId}/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${AWS::StackName}-aws-api"
+                  },
+                  "s3:x-amz-acl": "bucket-owner-full-control"
+                }
+              }
+            },
+            {
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "TrailBucket",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${TrailBucket.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "SupportedApiTrail": {
+      "Type": "AWS::CloudTrail::Trail",
+      "Condition": "SupplementaryEnabled",
+      "DependsOn": "TrailBucketPolicy",
+      "Properties": {
+        "TrailName": {
+          "Fn::Sub": "${AWS::StackName}-aws-api"
+        },
+        "S3BucketName": {
+          "Ref": "TrailBucket"
+        },
+        "IsLogging": true,
+        "IsMultiRegionTrail": false,
+        "IncludeGlobalServiceEvents": false,
+        "EnableLogFileValidation": true,
+        "AdvancedEventSelectors": [
+          {
+            "Name": "Management except cryptographic archive feedback",
+            "FieldSelectors": [
+              {
+                "Field": "eventCategory",
+                "Equals": [
+                  "Management"
+                ]
+              },
+              {
+                "Field": "eventSource",
+                "NotEquals": [
+                  "kms.amazonaws.com",
+                  "rdsdata.amazonaws.com"
+                ]
+              }
+            ]
+          },
+          {
+            "Name": "Selected Lambda invocation data",
+            "FieldSelectors": [
+              {
+                "Field": "eventCategory",
+                "Equals": [
+                  "Data"
+                ]
+              },
+              {
+                "Field": "resources.type",
+                "Equals": [
+                  "AWS::Lambda::Function"
+                ]
+              },
+              {
+                "Field": "resources.ARN",
+                "Equals": [
+                  {
+                    "Fn::GetAtt": [
+                      "AppFunction",
+                      "Arn"
+                    ]
+                  },
+                  {
+                    "Fn::GetAtt": [
+                      "GatewayFunction",
+                      "Arn"
+                    ]
+                  },
+                  {
+                    "Fn::GetAtt": [
+                      "IssuerFunction",
+                      "Arn"
+                    ]
+                  },
+                  {
+                    "Fn::GetAtt": [
+                      "SaasFunction",
+                      "Arn"
+                    ]
+                  },
+                  {
+                    "Fn::GetAtt": [
+                      "ResponderFunction",
+                      "Arn"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "PlatformQueueTransportPolicy": {
+      "Type": "AWS::SQS::QueuePolicy",
+      "Properties": {
+        "Queues": [
+          {
+            "Ref": "PlatformQueue"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "sqs:*",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "PlatformQueue",
+                  "Arn"
+                ]
+              },
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "CloudTrailQueueTransportPolicy": {
+      "Type": "AWS::SQS::QueuePolicy",
+      "Properties": {
+        "Queues": [
+          {
+            "Ref": "CloudTrailQueue"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "sqs:*",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "CloudTrailQueue",
+                  "Arn"
+                ]
+              },
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "EvidenceQueueTransportPolicy": {
+      "Type": "AWS::SQS::QueuePolicy",
+      "Properties": {
+        "Queues": [
+          {
+            "Ref": "EvidenceQueue"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "sqs:*",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "EvidenceQueue",
+                  "Arn"
+                ]
+              },
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "PlatformDLQAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "Namespace": "AWS/SQS",
+        "MetricName": "ApproximateNumberOfMessagesVisible",
+        "Dimensions": [
+          {
+            "Name": "QueueName",
+            "Value": {
+              "Fn::GetAtt": [
+                "PlatformDLQ",
+                "QueueName"
+              ]
+            }
+          }
+        ],
+        "Statistic": "Maximum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "Threshold": 0,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [
+          {
+            "Ref": "AlarmTopic"
+          }
+        ]
+      }
+    },
+    "CloudTrailDLQAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "Namespace": "AWS/SQS",
+        "MetricName": "ApproximateNumberOfMessagesVisible",
+        "Dimensions": [
+          {
+            "Name": "QueueName",
+            "Value": {
+              "Fn::GetAtt": [
+                "CloudTrailDLQ",
+                "QueueName"
+              ]
+            }
+          }
+        ],
+        "Statistic": "Maximum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "Threshold": 0,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [
+          {
+            "Ref": "AlarmTopic"
+          }
+        ]
+      }
+    },
+    "TelemetryFailureQueueAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "Namespace": "AWS/SQS",
+        "MetricName": "ApproximateNumberOfMessagesVisible",
+        "Dimensions": [
+          {
+            "Name": "QueueName",
+            "Value": {
+              "Fn::GetAtt": [
+                "TelemetryFailureQueue",
+                "QueueName"
+              ]
+            }
+          }
+        ],
+        "Statistic": "Maximum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "Threshold": 0,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [
+          {
+            "Ref": "AlarmTopic"
+          }
+        ]
+      }
+    },
+    "ProviderDLQ": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "MessageRetentionPeriod": 1209600,
+        "SqsManagedSseEnabled": true
+      }
+    },
+    "ProviderQueue": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "VisibilityTimeout": 180,
+        "MessageRetentionPeriod": 345600,
+        "SqsManagedSseEnabled": true,
+        "RedrivePolicy": {
+          "deadLetterTargetArn": {
+            "Fn::GetAtt": [
+              "ProviderDLQ",
+              "Arn"
+            ]
+          },
+          "maxReceiveCount": 5
+        }
+      }
+    },
+    "ProviderDLQAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "Namespace": "AWS/SQS",
+        "MetricName": "ApproximateNumberOfMessagesVisible",
+        "Dimensions": [
+          {
+            "Name": "QueueName",
+            "Value": {
+              "Fn::GetAtt": [
+                "ProviderDLQ",
+                "QueueName"
+              ]
+            }
+          }
+        ],
+        "Statistic": "Maximum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "Threshold": 0,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [
+          {
+            "Ref": "AlarmTopic"
+          }
+        ]
+      }
+    },
+    "Approvals": {
+      "Type": "AWS::DynamoDB::Table",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BillingMode": "PAY_PER_REQUEST",
+        "SSESpecification": {
+          "SSEEnabled": true
+        },
+        "PointInTimeRecoverySpecification": {
+          "PointInTimeRecoveryEnabled": true
+        },
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "approval_id",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "status",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "requested_at",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "approval_id",
+            "KeyType": "HASH"
+          }
+        ],
+        "TimeToLiveSpecification": {
+          "AttributeName": "expires_at",
+          "Enabled": true
+        },
+        "GlobalSecondaryIndexes": [
+          {
+            "IndexName": "StatusIndex",
+            "KeySchema": [
+              {
+                "AttributeName": "status",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "requested_at",
+                "KeyType": "RANGE"
+              }
+            ],
+            "Projection": {
+              "ProjectionType": "ALL"
+            }
+          }
+        ]
+      }
+    },
+    "ResponseHistory": {
+      "Type": "AWS::DynamoDB::Table",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BillingMode": "PAY_PER_REQUEST",
+        "SSESpecification": {
+          "SSEEnabled": true
+        },
+        "PointInTimeRecoverySpecification": {
+          "PointInTimeRecoveryEnabled": true
+        },
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "response_id",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "attempt",
+            "AttributeType": "N"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "response_id",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "attempt",
+            "KeyType": "RANGE"
+          }
+        ]
+      }
+    },
+    "ApprovalKey": {
+      "Type": "AWS::KMS::Key",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "Description": "Encrypt callback task tokens; never returned to operators",
+        "EnableKeyRotation": true,
+        "KeyPolicy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+                }
+              },
+              "Action": "kms:*",
+              "Resource": "*"
+            }
+          ]
+        }
+      }
+    },
+    "OperatorApi": {
+      "Type": "AWS::Serverless::Api",
+      "Properties": {
+        "StageName": "lab",
+        "EndpointConfiguration": "REGIONAL",
+        "Auth": {
+          "DefaultAuthorizer": "AWS_IAM"
+        },
+        "MethodSettings": [
+          {
+            "ResourcePath": "/*",
+            "HttpMethod": "*",
+            "ThrottlingBurstLimit": 10,
+            "ThrottlingRateLimit": 5
+          }
+        ]
+      }
+    },
+    "ApprovalBrokerRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      }
+    },
+    "ApprovalBrokerFunction": {
+      "Type": "AWS::Serverless::Function",
+      "Properties": {
+        "CodeUri": "../src",
+        "Handler": "sealed_telemetry.approvals.broker",
+        "Role": {
+          "Fn::GetAtt": [
+            "ApprovalBrokerRole",
+            "Arn"
+          ]
+        },
+        "Environment": {
+          "Variables": {
+            "APPROVAL_TABLE": {
+              "Ref": "Approvals"
+            },
+            "APPROVAL_KEY": {
+              "Ref": "ApprovalKey"
+            }
+          }
+        }
+      }
+    },
+    "ApprovalBrokerLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${ApprovalBrokerFunction}"
+        },
+        "RetentionInDays": 14
+      }
+    },
+    "ApprovalBrokerPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "ApprovalBrokerAccess",
+        "Roles": [
+          {
+            "Ref": "ApprovalBrokerRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:PutItem",
+                "dynamodb:GetItem"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "Approvals",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "kms:Encrypt"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "ApprovalKey",
+                  "Arn"
+                ]
+              },
+              "Condition": {
+                "StringEquals": {
+                  "kms:EncryptionContext:purpose": "sealed-approval"
+                }
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::Sub": "${ApprovalBrokerLogs.Arn}:*"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ApprovalApiRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      }
+    },
+    "ApprovalApiFunction": {
+      "Type": "AWS::Serverless::Function",
+      "Properties": {
+        "CodeUri": "../src",
+        "Handler": "sealed_telemetry.approvals.api",
+        "Role": {
+          "Fn::GetAtt": [
+            "ApprovalApiRole",
+            "Arn"
+          ]
+        },
+        "Environment": {
+          "Variables": {
+            "APPROVAL_TABLE": {
+              "Ref": "Approvals"
+            },
+            "APPROVAL_KEY": {
+              "Ref": "ApprovalKey"
+            },
+            "OPERATOR_PRINCIPAL": {
+              "Ref": "OperatorPrincipalArn"
+            },
+            "INTAKE_URL": {
+              "Fn::Sub": "https://${IntakeApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/lab/evidence"
+            }
+          }
+        },
+        "Events": {
+          "List": {
+            "Type": "Api",
+            "Properties": {
+              "RestApiId": {
+                "Ref": "OperatorApi"
+              },
+              "Path": "/v1/approvals",
+              "Method": "get"
+            }
+          },
+          "Get": {
+            "Type": "Api",
+            "Properties": {
+              "RestApiId": {
+                "Ref": "OperatorApi"
+              },
+              "Path": "/v1/approvals/{approval_id}",
+              "Method": "get"
+            }
+          },
+          "Decide": {
+            "Type": "Api",
+            "Properties": {
+              "RestApiId": {
+                "Ref": "OperatorApi"
+              },
+              "Path": "/v1/approvals/{approval_id}",
+              "Method": "post"
+            }
+          }
+        }
+      }
+    },
+    "ApprovalApiLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${ApprovalApiFunction}"
+        },
+        "RetentionInDays": 14
+      }
+    },
+    "ApprovalApiPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "ApprovalApiAccess",
+        "Roles": [
+          {
+            "Ref": "ApprovalApiRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:GetItem",
+                "dynamodb:UpdateItem"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "Approvals",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:Query"
+              ],
+              "Resource": {
+                "Fn::Sub": "${Approvals.Arn}/index/StatusIndex"
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "kms:Decrypt"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "ApprovalKey",
+                  "Arn"
+                ]
+              },
+              "Condition": {
+                "StringEquals": {
+                  "kms:EncryptionContext:purpose": "sealed-approval"
+                }
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "states:SendTaskSuccess"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "states:GetExecutionHistory"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:execution:${ResponseWorkflow.Name}:*"
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "execute-api:Invoke"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${IntakeApi}/lab/POST/evidence"
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::Sub": "${ApprovalApiLogs.Arn}:*"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "CasesRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      }
+    },
+    "CasesFunction": {
+      "Type": "AWS::Serverless::Function",
+      "Properties": {
+        "CodeUri": "../src",
+        "Handler": "sealed_telemetry.approvals.cases",
+        "Role": {
+          "Fn::GetAtt": [
+            "CasesRole",
+            "Arn"
+          ]
+        },
+        "Environment": {
+          "Variables": {
+            "DECISION_TABLE": {
+              "Ref": "Decisions"
+            },
+            "OPERATOR_PRINCIPAL": {
+              "Ref": "OperatorPrincipalArn"
+            }
+          }
+        },
+        "Events": {
+          "Get": {
+            "Type": "Api",
+            "Properties": {
+              "RestApiId": {
+                "Ref": "OperatorApi"
+              },
+              "Path": "/v1/cases/{case_id}",
+              "Method": "get"
+            }
+          }
+        }
+      }
+    },
+    "CasesLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${CasesFunction}"
+        },
+        "RetentionInDays": 14
+      }
+    },
+    "CasesPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "CasesAccess",
+        "Roles": [
+          {
+            "Ref": "CasesRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:Query"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "Decisions",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::Sub": "${CasesLogs.Arn}:*"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "DispatchRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      }
+    },
+    "DispatchFunction": {
+      "Type": "AWS::Serverless::Function",
+      "Properties": {
+        "CodeUri": "../src",
+        "Handler": "sealed_telemetry.approvals.dispatch",
+        "Role": {
+          "Fn::GetAtt": [
+            "DispatchRole",
+            "Arn"
+          ]
+        },
+        "Environment": {
+          "Variables": {
+            "WORKFLOW_ARN": {
+              "Ref": "ResponseWorkflow"
+            }
+          }
+        }
+      }
+    },
+    "DispatchLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${DispatchFunction}"
+        },
+        "RetentionInDays": 14
+      }
+    },
+    "DispatchPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "StartReviewedWorkflow",
+        "Roles": [
+          {
+            "Ref": "DispatchRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "states:StartExecution"
+              ],
+              "Resource": {
+                "Ref": "ResponseWorkflow"
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::Sub": "${DispatchLogs.Arn}:*"
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:SendMessage"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "AuditFailureQueue",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "DispatchInvokePermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Ref": "DispatchFunction"
+        },
+        "Principal": "events.amazonaws.com",
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        },
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "FindingRoute",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "DispatchAsync": {
+      "Type": "AWS::Lambda::EventInvokeConfig",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "DispatchFunction"
+        },
+        "Qualifier": "$LATEST",
+        "MaximumEventAgeInSeconds": 3600,
+        "MaximumRetryAttempts": 2,
+        "DestinationConfig": {
+          "OnFailure": {
+            "Destination": {
+              "Fn::GetAtt": [
+                "AuditFailureQueue",
+                "Arn"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "ReplayRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        }
+      }
+    },
+    "ReplayFunction": {
+      "Type": "AWS::Serverless::Function",
+      "Properties": {
+        "CodeUri": "../src",
+        "Handler": "sealed_telemetry.redrive.outbox_replay",
+        "Role": {
+          "Fn::GetAtt": [
+            "ReplayRole",
+            "Arn"
+          ]
+        },
+        "Timeout": 90,
+        "Environment": {
+          "Variables": {
+            "OUTBOX_TABLE": {
+              "Ref": "Outbox"
+            },
+            "PROVIDER_QUEUE_URL": {
+              "Ref": "ProviderQueue"
+            }
+          }
+        }
+      }
+    },
+    "ReplayLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${ReplayFunction}"
+        },
+        "RetentionInDays": 14
+      }
+    },
+    "ReplayPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "SelectedOutboxReplay",
+        "Roles": [
+          {
+            "Ref": "ReplayRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:GetItem"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "Outbox",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:SendMessage"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "ProviderQueue",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::Sub": "${ReplayLogs.Arn}:*"
+              }
+            }
+          ]
+        }
+      }
     }
   },
   "Outputs": {
@@ -2858,6 +4965,26 @@
       "Value": {
         "Fn::Sub": "https://${WorkloadApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/lab/oauth/token"
       }
+    },
+    "TrailBucket": {
+      "Value": {
+        "Ref": "TrailBucket"
+      }
+    },
+    "OperatorApiUrl": {
+      "Value": {
+        "Fn::Sub": "https://${OperatorApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/lab"
+      }
+    }
+  },
+  "Conditions": {
+    "SupplementaryEnabled": {
+      "Fn::Equals": [
+        {
+          "Ref": "EnableSupplementary"
+        },
+        "true"
+      ]
     }
   }
 }

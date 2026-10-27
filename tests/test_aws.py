@@ -42,6 +42,9 @@ def aws(monkeypatch):
             )
         url = boto3.client("sqs").create_queue(QueueName="intake")["QueueUrl"]
         monkeypatch.setenv("QUEUE_URL", url)
+        monkeypatch.setenv(
+            "QUEUE_SOURCES", json.dumps({"arn:aws:sqs:us-east-1:123456789012:intake": "collector"})
+        )
         yield
 
 
@@ -81,7 +84,15 @@ def test_intake_to_archive_and_duplicate(aws):
     import os
 
     messages = sqs.receive_message(QueueUrl=os.environ["QUEUE_URL"])["Messages"]
-    data = {"Records": [{"body": messages[0]["Body"], "messageId": "id"}]}
+    data = {
+        "Records": [
+            {
+                "body": messages[0]["Body"],
+                "messageId": "id",
+                "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:intake",
+            }
+        ]
+    }
     assert normalizer(data, None) == {"batchItemFailures": []}
     assert normalizer(data, None) == {"batchItemFailures": []}
     assert boto3.resource("dynamodb").Table("evidence").scan()["Count"] == 1
@@ -104,8 +115,16 @@ def test_partial_batch_and_conflicting_id(aws):
     result = normalizer(
         {
             "Records": [
-                {"messageId": "ok", "body": canonical(valid).decode()},
-                {"messageId": "bad", "body": "invalid-json"},
+                {
+                    "messageId": "ok",
+                    "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:intake",
+                    "body": canonical(valid).decode(),
+                },
+                {
+                    "messageId": "bad",
+                    "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:intake",
+                    "body": "invalid-json",
+                },
             ]
         },
         None,

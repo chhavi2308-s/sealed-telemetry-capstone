@@ -1,17 +1,21 @@
-"""Approved cloud containment with encrypted token retrieval and actual rejection check."""
+"""Leased, approval-bound containment with explicit backend denial verification."""
 
 import base64
 import json
 import os
 from typing import Any
+from urllib.error import URLError
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import boto3
 from boto3.dynamodb.conditions import Key
-from botocore.exceptions import ClientError
+from boto3.dynamodb.types import TypeSerializer
+from botocore.exceptions import BotoCoreError, ClientError
 
+from sealed_telemetry.approvals import action_fields, verify_proof
 from sealed_telemetry.aws_support import SDK_CONFIG
 from sealed_telemetry.cloud_lab import emit, https_json
-from sealed_telemetry.schema import Evidence, canonical, new_event, utcnow
+from sealed_telemetry.schema import Evidence, canonical, digest, new_event, timestamp, utcnow
 
 
 def responder(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -19,85 +23,174 @@ def responder(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return {"status": "approval_required", "verified_at": None}
     if event.get("state") not in {"SUSPICIOUS", "CORROBORATED_SUSPECTED_ABUSE"}:
         raise ValueError("finding not eligible for containment")
-    responses = boto3.resource("dynamodb", config=SDK_CONFIG).Table(os.environ["RESPONSE_TABLE"])
-    previous = responses.get_item(
-        Key={"response_id": event["decision_id"]}, ConsistentRead=True
-    ).get("Item")
+    verify_proof(event)
+    resource = boto3.resource("dynamodb", config=SDK_CONFIG)
+    responses = resource.Table(os.environ["RESPONSE_TABLE"])
+    response_id, action_hash = event["approval_id"], digest(action_fields(event))
+    previous = responses.get_item(Key={"response_id": response_id}, ConsistentRead=True).get("Item")
+    now = int(timestamp(utcnow()).timestamp())
     if previous:
-        saved: dict[str, Any] = json.loads(previous["body"])
-        emit(Evidence.parse(json.loads(previous["evidence"]), "responder"))
-        return saved
-    fingerprint = event["credential_fingerprint"]
-    table = boto3.resource("dynamodb", config=SDK_CONFIG).Table(os.environ["TOKEN_TABLE"])
-    rows = table.query(
-        IndexName="CredentialIndex",
-        KeyConditionExpression=Key("credential_fingerprint").eq(fingerprint),
-    )["Items"]
-    if len(rows) != 1:
-        raise RuntimeError("credential unavailable or ambiguous; retry after index propagation")
-    row = table.get_item(Key={"token_hash": rows[0]["token_hash"]}, ConsistentRead=True)["Item"]
-    plaintext = boto3.client("kms", config=SDK_CONFIG).decrypt(
-        CiphertextBlob=base64.b64decode(row["encrypted_token"]),
-        KeyId=os.environ["CREDENTIAL_KEY"],
-        EncryptionContext={"purpose": "sealed-lab-token", "fingerprint": fingerprint},
-    )["Plaintext"]
-    token = plaintext.decode()
-    table.update_item(
-        Key={"token_hash": row["token_hash"]},
-        UpdateExpression="SET revoked = :yes",
-        ExpressionAttributeValues={":yes": True},
-    )
-    if event.get("disable_integration") is True:
-        table.put_item(Item={"token_hash": "integration:enabled", "enabled": False})
-    verify_url = os.environ["SAAS_URL"]
-    if row["scope"] == "records:export":
-        verify_url = verify_url.rsplit("/", 1)[0] + "/export"
-    verification = https_json(
-        verify_url,
-        headers={"Authorization": "Bearer " + token, "X-Run-Id": event["run_id"]},
-    )
-    verified = verification["status"] == 403
-    now = utcnow()
-    result = {
-        "status": "verified" if verified else "unverified",
-        "verified_at": now if verified else None,
-        "decision_id": event["decision_id"],
-        "run_id": event["run_id"],
-        "verification_status": verification["status"],
-        "recovery": "not_requested",
-        "integration_disabled": event.get("disable_integration") is True,
+        if previous["request_hash"] != action_hash:
+            raise ValueError("response action identity conflict")
+        if (
+            previous["status"] in {"verified", "failed"}
+            or ("body" in previous and not json.loads(previous["body"]).get("retryable"))
+            or (int(previous["attempt"]) >= 3 and "body" in previous)
+        ):
+            if "evidence" in previous:
+                emit(Evidence.parse(json.loads(previous["evidence"]), "responder"))
+            result: dict[str, Any] = json.loads(previous["body"])
+            return result
+        if previous["status"] == "in_progress" and int(previous["lease_until"]) > now:
+            return {"status": "in_progress", "verified_at": None, "retryable": True}
+    if previous and int(previous["attempt"]) >= 3:
+        return {"status": "unverified", "verified_at": None, "retryable": False}
+    attempt = int(previous["attempt"]) + 1 if previous else 1
+    owner = str(uuid4())
+    claim = {
+        "response_id": response_id,
+        "request_hash": action_hash,
+        "status": "in_progress",
+        "attempt": attempt,
+        "lease_owner": owner,
+        "lease_until": now + 60,
     }
-    result["recovery"] = "manual_clean_redeployment_required"
+    args: dict[str, Any] = {
+        "Item": claim,
+        "ConditionExpression": "attribute_not_exists(response_id)",
+    }
+    if previous:
+        args.update(
+            ConditionExpression="attempt=:old AND lease_owner=:owner AND #s=:status",
+            ExpressionAttributeNames={"#s": "status"},
+            ExpressionAttributeValues={
+                ":old": previous["attempt"],
+                ":owner": previous["lease_owner"],
+                ":status": previous["status"],
+            },
+        )
+    try:
+        responses.put_item(**args)
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            raise
+        return {"status": "in_progress", "verified_at": None, "retryable": True}
+    result = {
+        "status": "unverified",
+        "verified_at": None,
+        "retryable": True,
+        "decision_id": event["decision_id"],
+        "approval_id": response_id,
+        "run_id": event["run_id"],
+        "attempt": attempt,
+        "integration_disabled": event.get("disable_integration") is True,
+        "recovery": "separate_approved_recovery_required",
+    }
+    fingerprint = event["credential_fingerprint"]
+    try:
+        table = resource.Table(os.environ["TOKEN_TABLE"])
+        rows = table.query(
+            IndexName="CredentialIndex",
+            KeyConditionExpression=Key("credential_fingerprint").eq(fingerprint),
+        )["Items"]
+        if len(rows) != 1:
+            raise RuntimeError("credential lookup unavailable or ambiguous")
+        row = table.get_item(Key={"token_hash": rows[0]["token_hash"]}, ConsistentRead=True)["Item"]
+        if row["scope"] not in {"records:read", "records:export"}:
+            raise ValueError("unsupported registered scope")
+        plaintext = boto3.client("kms", config=SDK_CONFIG).decrypt(
+            CiphertextBlob=base64.b64decode(row["encrypted_token"]),
+            KeyId=os.environ["CREDENTIAL_KEY"],
+            EncryptionContext={"purpose": "sealed-lab-token", "fingerprint": fingerprint},
+        )["Plaintext"]
+        token = plaintext.decode()
+        table.update_item(
+            Key={"token_hash": row["token_hash"]},
+            UpdateExpression="SET revoked=:yes",
+            ExpressionAttributeValues={":yes": True},
+        )
+        if event.get("disable_integration") is True:
+            table.put_item(Item={"token_hash": "integration:enabled", "enabled": False})
+        verify_url = os.environ["SAAS_URL"]
+        if row["scope"] == "records:export":
+            verify_url = verify_url.rsplit("/", 1)[0] + "/export"
+        verification = https_json(
+            verify_url, headers={"Authorization": "Bearer " + token, "X-Run-Id": event["run_id"]}
+        )
+        body = verification.get("body", {})
+        verified = (
+            verification["status"] == 403
+            and body.get("error") == "invalid_token"
+            and body.get("reason") in {"revoked", "integration_disabled"}
+            and bool(body.get("provider_request_id"))
+        )
+        result.update(
+            status="verified" if verified else "unverified",
+            verified_at=utcnow() if verified else None,
+            verification_status=verification["status"],
+            verification_request_id=body.get("provider_request_id"),
+            retryable=not verified and verification["status"] in {429, 500, 502, 503, 504},
+        )
+    except (BotoCoreError, ClientError, URLError, TimeoutError, RuntimeError, ValueError) as exc:
+        result["error_type"] = type(exc).__name__  # Never include provider body, URL auth or token.
+    result["retryable"] = bool(result["retryable"] and attempt < 3)
+    at = utcnow()
     evidence = new_event(
         "responder",
         "RESPONSE_ACTION",
         run_id=event["run_id"],
         scenario_id="lab-v1",
-        event_time_utc=now,
+        event_time_utc=at,
         actor_pseudonym="lab-responder",
         credential_fingerprint=fingerprint,
         operation="token:revoke:verify",
         resource_pseudonym="synthetic-integration",
-        outcome="success" if verified else "failure",
+        outcome="success" if result["status"] == "verified" else "failure",
+        trace_context={
+            "approval_id": response_id,
+            "attempt": str(attempt),
+            "request_hash": action_hash,
+        },
     )
-    try:
-        responses.put_item(
-            Item={
-                "response_id": event["decision_id"],
-                "decision_id": event["decision_id"],
-                "body": canonical(result).decode(),
-                "evidence": canonical(evidence.to_dict()).decode(),
-                "recorded_at": now,
+    evidence = Evidence.parse(
+        {
+            **evidence.to_dict(),
+            "event_id": str(uuid5(NAMESPACE_URL, response_id + ":" + str(attempt))),
+        },
+        "responder",
+    )
+    final = {
+        **claim,
+        "status": result["status"],
+        "body": canonical(result).decode(),
+        "evidence": canonical(evidence.to_dict()).decode(),
+        "recorded_at": at,
+        "lease_until": 0,
+    }
+    serializer = TypeSerializer()
+    boto3.client("dynamodb", config=SDK_CONFIG).transact_write_items(
+        TransactItems=[
+            {
+                "Put": {
+                    "TableName": os.environ["RESPONSE_TABLE"],
+                    "Item": {k: serializer.serialize(v) for k, v in final.items()},
+                    "ConditionExpression": "lease_owner=:owner",
+                    "ExpressionAttributeValues": {":owner": {"S": owner}},
+                }
             },
-            ConditionExpression="attribute_not_exists(response_id)",
-        )
-    except ClientError as exc:
-        if exc.response["Error"]["Code"] != "ConditionalCheckFailedException":
-            raise
-        previous = responses.get_item(
-            Key={"response_id": event["decision_id"]}, ConsistentRead=True
-        )["Item"]
-        result = json.loads(previous["body"])
-        evidence = Evidence.parse(json.loads(previous["evidence"]), "responder")
+            {
+                "Put": {
+                    "TableName": os.environ["RESPONSE_HISTORY_TABLE"],
+                    "Item": {
+                        "response_id": {"S": response_id},
+                        "attempt": {"N": str(attempt)},
+                        "body": {"S": canonical(result).decode()},
+                        "evidence": {"S": canonical(evidence.to_dict()).decode()},
+                    },
+                    "ConditionExpression": "attribute_not_exists(response_id)",
+                }
+            },
+        ]
+    )
     emit(evidence)
     return result

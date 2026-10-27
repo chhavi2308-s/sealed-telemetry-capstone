@@ -6,8 +6,10 @@ import boto3
 import pytest
 from moto import mock_aws
 
+from sealed_telemetry.approvals import action_fields
 from sealed_telemetry.cloud_lab import issuer
 from sealed_telemetry.cloud_response import responder
+from sealed_telemetry.schema import digest, timestamp, utcnow
 
 
 @pytest.mark.parametrize("scope", ["records:read", "records:export"])
@@ -44,8 +46,24 @@ def test_cloud_responder_verified_and_idempotent(monkeypatch, status, scope):
         KeySchema=[{"AttributeName": "response_id", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "response_id", "AttributeType": "S"}],
     )
+    monkeypatch.setenv("APPROVAL_TABLE", "approvals")
+    monkeypatch.setenv("RESPONSE_HISTORY_TABLE", "history")
+    for name, pk, sk in [("approvals", "approval_id", None), ("history", "response_id", "attempt")]:
+        keys = [{"AttributeName": pk, "KeyType": "HASH"}]
+        attrs = [{"AttributeName": pk, "AttributeType": "S"}]
+        if sk:
+            keys.append({"AttributeName": sk, "KeyType": "RANGE"})
+            attrs.append({"AttributeName": sk, "AttributeType": "N"})
+        boto3.client("dynamodb").create_table(
+            TableName=name,
+            BillingMode="PAY_PER_REQUEST",
+            KeySchema=keys,
+            AttributeDefinitions=attrs,
+        )
     token = issuer({"operation": "issue", "scope": scope}, None)
     finding = {
+        "approval_id": "approval",
+        "approved_by": "operator",
         "state": "SUSPICIOUS",
         "approved": True,
         "disable_integration": True,
@@ -53,19 +71,38 @@ def test_cloud_responder_verified_and_idempotent(monkeypatch, status, scope):
         "credential_fingerprint": token["credential_fingerprint"],
         "run_id": "run",
     }
+    boto3.resource("dynamodb").Table("approvals").put_item(
+        Item={
+            "approval_id": "approval",
+            "approved_by": "operator",
+            "approved": True,
+            "status": "approved",
+            "request_hash": digest(action_fields(finding)),
+            "authorized_until": int(timestamp(utcnow()).timestamp()) + 900,
+        }
+    )
     with (
         patch(
-            "sealed_telemetry.cloud_response.https_json", return_value={"status": status}
+            "sealed_telemetry.cloud_response.https_json",
+            return_value={
+                "status": status,
+                "body": {
+                    "error": "invalid_token",
+                    "reason": "revoked",
+                    "provider_request_id": "provider-1",
+                },
+            },
         ) as call,
         patch("sealed_telemetry.cloud_response.emit") as emit,
     ):
         assert responder(finding, None)["status"] == ("verified" if status == 403 else "unverified")
         assert responder(finding, None)["status"] == ("verified" if status == 403 else "unverified")
-        call.assert_called_once()
+        assert call.call_count == (2 if status == 500 else 1)
         assert call.call_args.args[0].endswith(
             "/export" if scope == "records:export" else "/records"
         )
-        assert emit.call_args_list[0].args[0] == emit.call_args_list[1].args[0]
+        if status != 500:
+            assert emit.call_args_list[0].args[0] == emit.call_args_list[1].args[0]
         assert token["access_token"] not in json.dumps(responder(finding, None))
     assert boto3.resource("dynamodb").Table("responses").scan()["Count"] == 1
     assert (
@@ -90,5 +127,5 @@ def test_infrastructure_security_contract():
     assert r["EvidenceQueue"]["Properties"]["VisibilityTimeout"] >= 6 * 25
     assert (
         r["ResponseWorkflow"]["Properties"]["Definition"]["States"]["ApprovalGate"]["Default"]
-        == "ApprovalRequired"
+        == "Rejected"
     )
