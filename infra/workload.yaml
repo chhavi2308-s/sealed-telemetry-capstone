@@ -46,6 +46,15 @@
         "false"
       ]
     },
+    "Quiesce": {
+      "Type": "String",
+      "Default": "false",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Description": "Approved shutdown: reject new lab actions, stop health production and supplementary subscriptions; keep consumers/detector draining"
+    },
     "SecurityAccountId": {
       "Type": "String",
       "AllowedPattern": "[0-9]{12}"
@@ -71,11 +80,23 @@
   },
   "Conditions": {
     "SupplementaryEnabled": {
-      "Fn::Equals": [
+      "Fn::And": [
         {
-          "Ref": "EnableSupplementary"
+          "Fn::Equals": [
+            {
+              "Ref": "EnableSupplementary"
+            },
+            "true"
+          ]
         },
-        "true"
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "Quiesce"
+            },
+            "false"
+          ]
+        }
       ]
     }
   },
@@ -101,6 +122,9 @@
             },
             "LAB_EXPOSURE_ENABLED": {
               "Ref": "LabExposureEnabled"
+            },
+            "QUIESCED": {
+              "Ref": "Quiesce"
             }
           }
         },
@@ -231,8 +255,53 @@
             }
           }
         ],
+        "PermissionsBoundary": {
+          "Ref": "WorkloadBoundary"
+        },
         "RoleName": {
           "Fn::Sub": "${AWS::StackName}-app"
+        }
+      }
+    },
+    "WorkloadBoundary": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties": {
+        "Description": "Maximum workload permissions: own logs and source-bound intent intake only",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-app:*"
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "execute-api:Invoke"
+              ],
+              "Resource": {
+                "Ref": "IntakeArn"
+              }
+            },
+            {
+              "Effect": "Deny",
+              "Action": [
+                "s3:*",
+                "dynamodb:*",
+                "kms:*",
+                "iam:*",
+                "sts:AssumeRole",
+                "sqs:*"
+              ],
+              "Resource": "*"
+            }
+          ]
         }
       }
     },

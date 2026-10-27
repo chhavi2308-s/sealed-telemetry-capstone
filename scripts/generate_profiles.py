@@ -30,7 +30,14 @@ def profiles(template: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     observation_role = sub(
         "arn:${AWS::Partition}:iam::${WorkloadAccountId}:role/${WorkloadStackName}-observation"
     )
-    workload_names = {"AppFunction", "AppRole", "AppPolicy", "AppLogs", "AppLogPolicy"}
+    workload_names = {
+        "AppFunction",
+        "AppRole",
+        "AppPolicy",
+        "AppLogs",
+        "AppLogPolicy",
+        "WorkloadBoundary",
+    }
     workload_resources = {k: copy.deepcopy(resources.pop(k)) for k in sorted(workload_names)}
     resources.pop("AppErrorAlarm")
     resources.pop("PlatformPermissionAppLogs")
@@ -137,7 +144,7 @@ def profiles(template: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     )
     workload["Parameters"] = {
         k: copy.deepcopy(template["Parameters"][k])
-        for k in ["Owner", "ExpiresOn", "EnableSupplementary", "LabExposureEnabled"]
+        for k in ["Owner", "ExpiresOn", "EnableSupplementary", "LabExposureEnabled", "Quiesce"]
     }
     workload["Parameters"].update(
         {
@@ -154,7 +161,9 @@ def profiles(template: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         }
     )
     workload["Parameters"]["SecurityAccountId"]["AllowedPattern"] = "[0-9]{12}"
-    workload["Conditions"] = copy.deepcopy(template["Conditions"])
+    workload["Conditions"] = {
+        k: copy.deepcopy(template["Conditions"][k]) for k in ["SupplementaryEnabled"]
+    }
     wr = workload["Resources"] = workload_resources
     wr["AppRole"]["Properties"]["RoleName"] = sub("${AWS::StackName}-app")
     wr["AppFunction"]["Properties"]["FunctionName"] = sub("${AWS::StackName}-app")
@@ -162,8 +171,12 @@ def profiles(template: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         "INTAKE_URL": ref("IntakeUrl"),
         "SAAS_URL": ref("SaasRecordsUrl"),
         "LAB_EXPOSURE_ENABLED": ref("LabExposureEnabled"),
+        "QUIESCED": ref("Quiesce"),
     }
     wr["AppPolicy"]["Properties"]["PolicyDocument"]["Statement"][0]["Resource"] = ref("IntakeArn")
+    wr["WorkloadBoundary"]["Properties"]["PolicyDocument"]["Statement"][1]["Resource"] = ref(
+        "IntakeArn"
+    )
     wr["GatewayInvokePermission"] = {
         "Type": "AWS::Lambda::Permission",
         "Properties": {

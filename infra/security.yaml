@@ -41,6 +41,15 @@
       "Default": "",
       "Description": "Optional exact IAM read-only investigation role ARN; no response approval authority"
     },
+    "Quiesce": {
+      "Type": "String",
+      "Default": "false",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Description": "Approved shutdown: reject new lab actions, stop health production and supplementary subscriptions; keep consumers/detector draining"
+    },
     "WorkloadAccountId": {
       "Type": "String",
       "AllowedPattern": "[0-9]{12}"
@@ -235,7 +244,9 @@
             }
           ]
         }
-      }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
     },
     "DLQ": {
       "Type": "AWS::SQS::Queue",
@@ -631,7 +642,9 @@
             }
           }
         ]
-      }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
     },
     "FindingsBus": {
       "Type": "AWS::Events::EventBus",
@@ -1530,6 +1543,9 @@
             },
             "OUTBOX_TABLE": {
               "Ref": "ProviderOutbox"
+            },
+            "QUIESCED": {
+              "Ref": "Quiesce"
             }
           }
         },
@@ -1701,6 +1717,9 @@
             },
             "LAB_EXPOSURE_ENABLED": {
               "Ref": "LabExposureEnabled"
+            },
+            "QUIESCED": {
+              "Ref": "Quiesce"
             }
           }
         },
@@ -3089,7 +3108,19 @@
               "Principal": {
                 "Service": "states.amazonaws.com"
               },
-              "Action": "sts:AssumeRole"
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnLike": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:*"
+                  }
+                }
+              }
             }
           ]
         },
@@ -3528,7 +3559,13 @@
             "Type": "Schedule",
             "Properties": {
               "Schedule": "rate(1 minute)",
-              "Enabled": true
+              "Enabled": {
+                "Fn::If": [
+                  "Quiesced",
+                  false,
+                  true
+                ]
+              }
             }
           }
         }
@@ -5198,11 +5235,13 @@
             }
           ]
         }
-      }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
     },
     "SupportedApiTrail": {
       "Type": "AWS::CloudTrail::Trail",
-      "Condition": "SupplementaryEnabled",
+      "Condition": "TrailEnabled",
       "DependsOn": "TrailBucketPolicy",
       "Properties": {
         "TrailName": {
@@ -5211,7 +5250,13 @@
         "S3BucketName": {
           "Ref": "TrailBucket"
         },
-        "IsLogging": true,
+        "IsLogging": {
+          "Fn::If": [
+            "Quiesced",
+            false,
+            true
+          ]
+        },
         "IsMultiRegionTrail": false,
         "IncludeGlobalServiceEvents": false,
         "EnableLogFileValidation": true,
@@ -7063,6 +7108,34 @@
   },
   "Conditions": {
     "SupplementaryEnabled": {
+      "Fn::And": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "EnableSupplementary"
+            },
+            "true"
+          ]
+        },
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "Quiesce"
+            },
+            "false"
+          ]
+        }
+      ]
+    },
+    "Quiesced": {
+      "Fn::Equals": [
+        {
+          "Ref": "Quiesce"
+        },
+        "true"
+      ]
+    },
+    "TrailEnabled": {
       "Fn::Equals": [
         {
           "Ref": "EnableSupplementary"

@@ -165,6 +165,8 @@ def issuer(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
 
 def saas(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    if os.environ.get("QUIESCED") == "true":
+        return response(503, {"error": "lab_quiesced"})
     headers = {k.lower(): v for k, v in (event.get("headers") or {}).items()}
     token = headers.get("authorization", "").removeprefix("Bearer ")
     row = (
@@ -273,6 +275,8 @@ def new_event_from_raw(raw: dict[str, Any]) -> Any:
 
 
 def gateway(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    if os.environ.get("QUIESCED") == "true":
+        return response(503, {"error": "lab_quiesced"})
     try:
         body = parse_body(event)
     except ValueError:
@@ -307,6 +311,8 @@ def gateway(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
 
 def app(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    if os.environ.get("QUIESCED") == "true":
+        return {"status": 503, "error": "lab_quiesced"}
     if event.get("operation") == "permission_probe":
         if os.environ.get("LAB_EXPOSURE_ENABLED") != "true":
             raise ValueError("disposable lab acceptance probe disabled")

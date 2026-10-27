@@ -40,6 +40,15 @@
       "Type": "String",
       "Default": "",
       "Description": "Optional exact IAM read-only investigation role ARN; no response approval authority"
+    },
+    "Quiesce": {
+      "Type": "String",
+      "Default": "false",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Description": "Approved shutdown: reject new lab actions, stop health production and supplementary subscriptions; keep consumers/detector draining"
     }
   },
   "Globals": {
@@ -227,7 +236,9 @@
             }
           ]
         }
-      }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
     },
     "DLQ": {
       "Type": "AWS::SQS::Queue",
@@ -623,7 +634,9 @@
             }
           }
         ]
-      }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
     },
     "FindingsBus": {
       "Type": "AWS::Events::EventBus",
@@ -950,7 +963,10 @@
               "Ref": "ExpiresOn"
             }
           }
-        ]
+        ],
+        "PermissionsBoundary": {
+          "Ref": "WorkloadBoundary"
+        }
       }
     },
     "IssuerRole": {
@@ -1540,6 +1556,9 @@
             },
             "OUTBOX_TABLE": {
               "Ref": "ProviderOutbox"
+            },
+            "QUIESCED": {
+              "Ref": "Quiesce"
             }
           }
         },
@@ -1708,8 +1727,14 @@
             },
             "LAB_EXPOSURE_ENABLED": {
               "Ref": "LabExposureEnabled"
+            },
+            "QUIESCED": {
+              "Ref": "Quiesce"
             }
           }
+        },
+        "FunctionName": {
+          "Fn::Sub": "${AWS::StackName}-app"
         }
       }
     },
@@ -1768,6 +1793,9 @@
             },
             "LAB_EXPOSURE_ENABLED": {
               "Ref": "LabExposureEnabled"
+            },
+            "QUIESCED": {
+              "Ref": "Quiesce"
             }
           }
         },
@@ -3232,7 +3260,19 @@
               "Principal": {
                 "Service": "states.amazonaws.com"
               },
-              "Action": "sts:AssumeRole"
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                },
+                "ArnLike": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:*"
+                  }
+                }
+              }
             }
           ]
         },
@@ -3665,7 +3705,13 @@
             "Type": "Schedule",
             "Properties": {
               "Schedule": "rate(1 minute)",
-              "Enabled": true
+              "Enabled": {
+                "Fn::If": [
+                  "Quiesced",
+                  false,
+                  true
+                ]
+              }
             }
           }
         }
@@ -5403,11 +5449,13 @@
             }
           ]
         }
-      }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
     },
     "SupportedApiTrail": {
       "Type": "AWS::CloudTrail::Trail",
-      "Condition": "SupplementaryEnabled",
+      "Condition": "TrailEnabled",
       "DependsOn": "TrailBucketPolicy",
       "Properties": {
         "TrailName": {
@@ -5416,7 +5464,13 @@
         "S3BucketName": {
           "Ref": "TrailBucket"
         },
-        "IsLogging": true,
+        "IsLogging": {
+          "Fn::If": [
+            "Quiesced",
+            false,
+            true
+          ]
+        },
         "IsMultiRegionTrail": false,
         "IncludeGlobalServiceEvents": false,
         "EnableLogFileValidation": true,
@@ -7163,6 +7217,48 @@
           "Fn::Sub": "{\"widgets\": [{\"type\": \"metric\", \"x\": 0, \"y\": 0, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Evidence backlog\", \"metrics\": [[\"AWS/SQS\", \"ApproximateAgeOfOldestMessage\", \"QueueName\", \"${EvidenceQueue.QueueName}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Maximum\", \"view\": \"timeSeries\"}}, {\"type\": \"metric\", \"x\": 12, \"y\": 0, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Provider backlog\", \"metrics\": [[\"AWS/SQS\", \"ApproximateAgeOfOldestMessage\", \"QueueName\", \"${ProviderQueue.QueueName}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Maximum\", \"view\": \"timeSeries\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 6, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Collector errors\", \"metrics\": [[\"AWS/Lambda\", \"Errors\", \"FunctionName\", \"${CollectorFunction}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"view\": \"timeSeries\"}}, {\"type\": \"metric\", \"x\": 12, \"y\": 6, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Normalizer errors\", \"metrics\": [[\"AWS/Lambda\", \"Errors\", \"FunctionName\", \"${NormalizerFunction}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"view\": \"timeSeries\"}}, {\"type\": \"metric\", \"x\": 0, \"y\": 12, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Provider forwarding errors\", \"metrics\": [[\"AWS/Lambda\", \"Errors\", \"FunctionName\", \"${AuditForwarderFunction}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"view\": \"timeSeries\"}}, {\"type\": \"metric\", \"x\": 12, \"y\": 12, \"width\": 12, \"height\": 6, \"properties\": {\"title\": \"Response failures\", \"metrics\": [[\"AWS/States\", \"ExecutionsFailed\", \"StateMachineArn\", \"${ResponseWorkflow}\"]], \"region\": \"${AWS::Region}\", \"period\": 60, \"stat\": \"Sum\", \"view\": \"timeSeries\"}}]}"
         }
       }
+    },
+    "WorkloadBoundary": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties": {
+        "Description": "Maximum workload permissions: own logs and source-bound intent intake only",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-app:*"
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "execute-api:Invoke"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${IntakeApi}/lab/POST/evidence"
+              }
+            },
+            {
+              "Effect": "Deny",
+              "Action": [
+                "s3:*",
+                "dynamodb:*",
+                "kms:*",
+                "iam:*",
+                "sts:AssumeRole",
+                "sqs:*"
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+      }
     }
   },
   "Outputs": {
@@ -7229,6 +7325,34 @@
   },
   "Conditions": {
     "SupplementaryEnabled": {
+      "Fn::And": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "EnableSupplementary"
+            },
+            "true"
+          ]
+        },
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "Quiesce"
+            },
+            "false"
+          ]
+        }
+      ]
+    },
+    "Quiesced": {
+      "Fn::Equals": [
+        {
+          "Ref": "Quiesce"
+        },
+        "true"
+      ]
+    },
+    "TrailEnabled": {
       "Fn::Equals": [
         {
           "Ref": "EnableSupplementary"

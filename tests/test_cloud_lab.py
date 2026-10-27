@@ -162,3 +162,16 @@ def test_workload_permission_probe_is_fail_closed(monkeypatch):
         assert not result["passed"]
         assert result["results"]["archive_put"] == "UNEXPECTED_ALLOW"
         assert client.delete_object.call_args.kwargs["Key"].endswith("-absent")
+
+
+def test_quiesced_workload_and_provider_do_not_create_new_actions(monkeypatch):
+    monkeypatch.setenv("QUIESCED", "true")
+    with (
+        patch("sealed_telemetry.cloud_lab.emit") as emit,
+        patch("sealed_telemetry.cloud_lab.boto3.resource") as db,
+    ):
+        assert gateway({}, None)["statusCode"] == 503
+        assert saas({}, None)["statusCode"] == 503
+        assert app({}, None)["status"] == 503
+        emit.assert_not_called()
+        db.assert_not_called()

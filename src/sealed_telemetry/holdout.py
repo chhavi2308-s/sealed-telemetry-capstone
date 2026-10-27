@@ -140,76 +140,82 @@ def run(directory: Path, seeds: list[int], trials: int) -> dict[str, Any]:
     completeness = []
     for seed in seeds:
         rng = random.Random(seed)  # noqa: S311 -- deterministic synthetic events, never credentials
-        for case in CASES:
-            for trial in range(trials):
-                arrivals, label = generate(rng, case)
-                visible = {}
-                first_detection: dict[str, int] = {}
-                report: dict[str, Any] = {}
-                health = {
-                    s: case != "collector-outage"
-                    for s in ["gateway", "provider", "app", "collector"]
-                }
-                if case == "missing-provider":
-                    health["provider"] = False
-                for tick in range(0, 151, 5):
-                    for delay, e in arrivals:
-                        if delay <= tick:
-                            visible[e.event_id] = e
-                    now = (timestamp(label["start"]) + timedelta(seconds=tick)).isoformat()
-                    decisions = reconcile(list(visible.values()), now, health, policy)
-                    report = {
-                        "timeline": [
-                            {
-                                "event": e.to_dict(),
-                                "receipt": {"canonical_hash": digest(e.to_dict())},
-                            }
-                            for e in visible.values()
-                        ],
-                        "decisions": decisions,
-                    }
-                    if case == "tampering" and report["timeline"]:
-                        report["timeline"][0]["receipt"]["canonical_hash"] = "0" * 64
-                    for name, (predicted, _) in predictions(report).items():
-                        if predicted and name not in first_detection:
-                            first_detection[name] = tick
-                for detector, (prediction, uncertain) in predictions(report).items():
-                    rows.append(
+        order = [(case, trial) for case in CASES for trial in range(trials)]
+        rng.shuffle(order)
+        for case, trial in order:
+            arrivals, label = generate(rng, case)
+            visible = {}
+            first_detection: dict[str, int] = {}
+            report: dict[str, Any] = {}
+            health = {
+                s: case != "collector-outage" for s in ["gateway", "provider", "app", "collector"]
+            }
+            if case == "missing-provider":
+                health["provider"] = False
+            for tick in range(0, 151, 5):
+                for delay, e in arrivals:
+                    if delay <= tick:
+                        visible[e.event_id] = e
+                now = (timestamp(label["start"]) + timedelta(seconds=tick)).isoformat()
+                decisions = reconcile(list(visible.values()), now, health, policy)
+                report = {
+                    "timeline": [
                         {
-                            "run_id": label["run_id"],
-                            "seed": seed,
-                            "trial": trial,
-                            "detector": detector,
-                            "prediction": detector in first_detection,
-                            "final_prediction": prediction,
-                            "inconclusive": uncertain,
-                            "attack": label["attack"],
-                            "virtual_detection_latency_seconds": first_detection.get(detector)
-                            if label["attack"]
-                            else None,
+                            "event": e.to_dict(),
+                            "receipt": {"canonical_hash": digest(e.to_dict())},
                         }
-                    )
-                dataset.append(
+                        for e in visible.values()
+                    ],
+                    "decisions": decisions,
+                }
+                if case == "tampering" and report["timeline"]:
+                    report["timeline"][0]["receipt"]["canonical_hash"] = "0" * 64
+                for name, (predicted, _) in predictions(report).items():
+                    if predicted and name not in first_detection:
+                        first_detection[name] = tick
+            for detector, (prediction, uncertain) in predictions(report).items():
+                rows.append(
                     {
                         "run_id": label["run_id"],
-                        "health": health,
-                        "arrivals": [
-                            {"received_offset_seconds": d, "event": e.to_dict()}
-                            for d, e in arrivals
-                        ],
+                        "seed": seed,
+                        "trial": trial,
+                        "detector": detector,
+                        "prediction": detector in first_detection,
+                        "final_prediction": prediction,
+                        "inconclusive": uncertain,
+                        "attack": label["attack"],
+                        "virtual_detection_latency_seconds": first_detection.get(detector)
+                        if label["attack"]
+                        else None,
                     }
                 )
-                labels.append(label)
-                completeness.append(
-                    reconstruction(
-                        label["provider_request_ids"],
-                        [
-                            e.provider_request_id
-                            for e in visible.values()
-                            if e.source_id == "provider" and e.provider_request_id is not None
-                        ],
-                    )
+            dataset.append(
+                {
+                    "run_id": label["run_id"],
+                    "health": health,
+                    "arrivals": [
+                        {
+                            "received_offset_seconds": d,
+                            "event": e.to_dict(),
+                            "receipt_canonical_hash": "0" * 64
+                            if case == "tampering" and e.event_id == arrivals[0][1].event_id
+                            else digest(e.to_dict()),
+                        }
+                        for d, e in arrivals
+                    ],
+                }
+            )
+            labels.append(label)
+            completeness.append(
+                reconstruction(
+                    label["provider_request_ids"],
+                    [
+                        e.provider_request_id
+                        for e in visible.values()
+                        if e.source_id == "provider" and e.provider_request_id is not None
+                    ],
                 )
+            )
     summary = {
         "mode": "synthetic_parameter_holdout",
         "protocol_hash": digest(protocol),
@@ -225,6 +231,14 @@ def run(directory: Path, seeds: list[int], trials: int) -> dict[str, Any]:
                 if r["detector"] == "iber" and r["virtual_detection_latency_seconds"] is not None
             ],
             0.5,
+        ),
+        "iber_virtual_detection_p95_seconds": percentile(
+            [
+                r["virtual_detection_latency_seconds"]
+                for r in rows
+                if r["detector"] == "iber" and r["virtual_detection_latency_seconds"] is not None
+            ],
+            0.95,
         ),
         "forensic_completeness": sum(r["completeness"] for r in completeness) / len(completeness),
         "cloud_detection_latency": None,

@@ -40,6 +40,7 @@ def main() -> None:
                 }
             )
             if resource["Type"] in {
+                "AWS::IAM::ManagedPolicy",
                 "AWS::IAM::Role",
                 "AWS::IAM::Policy",
                 "AWS::S3::BucketPolicy",

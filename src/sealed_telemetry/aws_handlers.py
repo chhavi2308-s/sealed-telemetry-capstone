@@ -175,7 +175,7 @@ def persist(envelope: dict[str, Any]) -> None:
         except ClientError as exc:
             if exc.response["Error"]["Code"] != "ConditionalCheckFailedException":
                 raise
-    elif event.event_type in {
+    elif event.credential_fingerprint != "0" * 64 and event.event_type in {
         "EXPECTED_ACTION",
         "INTENT_CREATED",
         "PROVIDER_ACTION",

@@ -17,7 +17,7 @@ jobs:
       - run: ruff format --check src tests scripts
       - run: mypy src
       - run: pytest -q
-      - run: cfn-lint infra/template.yaml
+      - run: cfn-lint infra/template.yaml infra/security.yaml infra/workload.yaml infra/budget.yaml
       - run: pip-audit --vulnerability-service osv --no-deps --disable-pip -r requirements.lock
       - run: pip-audit --vulnerability-service osv --no-deps --disable-pip -r requirements-dev.lock
       - name: Validate and build SAM without deployment
@@ -26,6 +26,18 @@ jobs:
           AWS_EC2_METADATA_DISABLED: 'true'
         run: |
           python -m venv .sam-tools
-          .sam-tools/bin/python -m pip install aws-sam-cli==1.170.0
+          .sam-tools/bin/python -m pip install -r requirements-sam.lock
           .sam-tools/bin/sam validate --template-file infra/template.yaml --lint --region us-east-1
+          .sam-tools/bin/sam validate --template-file infra/security.yaml --lint --region us-east-1
+          .sam-tools/bin/sam validate --template-file infra/workload.yaml --lint --region us-east-1
+          .sam-tools/bin/python scripts/resource_inventory.py
           .sam-tools/bin/sam build --template-file infra/template.yaml
+      - name: Build and install package in a clean environment
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist
+          python -m venv .clean-install
+          .clean-install/bin/python -m pip install -r requirements.lock
+          .clean-install/bin/python -m pip install --no-deps dist/*.whl
+          cd /tmp
+          "$GITHUB_WORKSPACE/.clean-install/bin/python" -m sealed_telemetry.cli demo --scenario replay-suppression --output /tmp/sealed-demo
+
