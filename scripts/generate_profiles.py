@@ -126,6 +126,11 @@ def profiles(template: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         resources.pop("CrossAccountPlatformPolicy")["Properties"]["PolicyDocument"]["Statement"]
     )
     outputs = security["Outputs"]
+    outputs["WorkloadIntakeUrl"] = {
+        "Value": sub(
+            "https://${IntakeApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/lab/evidence"
+        )
+    }
     outputs["WorkloadIntakeArn"] = {
         "Value": sub(
             "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${IntakeApi}/lab/POST/evidence"
@@ -285,6 +290,52 @@ def profiles(template: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         if rule["Name"] == "prefix":
             rule["Value"] = sub("AWSLogs/${WorkloadAccountId}/CloudTrail/")
     notifications.append(notification)
+    for key in ["TelemetryFailureQueueArn"]:
+        workload["Parameters"][key] = {"Type": "String"}
+    outputs["TelemetryFailureQueueArn"] = {
+        "Value": {"Fn::GetAtt": ["TelemetryFailureQueue", "Arn"]}
+    }
+    pf["EventInvokeConfig"] = {
+        "MaximumEventAgeInSeconds": 3600,
+        "MaximumRetryAttempts": 2,
+        "DestinationConfig": {
+            "OnFailure": {"Type": "SQS", "Destination": ref("TelemetryFailureQueueArn")}
+        },
+    }
+    wr["PlatformIngestPolicy"]["Properties"]["PolicyDocument"]["Statement"].append(
+        {
+            "Effect": "Allow",
+            "Action": ["sqs:SendMessage"],
+            "Resource": ref("TelemetryFailureQueueArn"),
+        }
+    )
+    resources["WorkloadTelemetryFailurePolicy"] = {
+        "Type": "AWS::SQS::QueuePolicy",
+        "Properties": {
+            "Queues": [ref("TelemetryFailureQueue")],
+            "PolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Principal": {
+                            "AWS": sub("arn:${AWS::Partition}:iam::${WorkloadAccountId}:root")
+                        },
+                        "Action": "sqs:SendMessage",
+                        "Resource": {"Fn::GetAtt": ["TelemetryFailureQueue", "Arn"]},
+                        "Condition": {
+                            "ArnEquals": {
+                                "aws:PrincipalArn": sub(
+                                    "arn:${AWS::Partition}:iam::${WorkloadAccountId}:role/${WorkloadStackName}-telemetry"
+                                )
+                            }
+                        },
+                    }
+                ],
+            },
+        },
+    }
+    workload["Outputs"] = {"AppFunctionArn": {"Value": {"Fn::GetAtt": ["AppFunction", "Arn"]}}}
     return security, workload
 
 

@@ -3288,6 +3288,18 @@
                   "Arn"
                 ]
               }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:GetItem"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "ResponseHistory",
+                  "Arn"
+                ]
+              }
             }
           ]
         }

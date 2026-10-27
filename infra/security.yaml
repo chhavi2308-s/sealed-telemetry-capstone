@@ -3136,6 +3136,18 @@
                   "Arn"
                 ]
               }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:GetItem"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "ResponseHistory",
+                  "Arn"
+                ]
+              }
             }
           ]
         }
@@ -7190,6 +7202,43 @@
           }
         ]
       }
+    },
+    "WorkloadTelemetryFailurePolicy": {
+      "Type": "AWS::SQS::QueuePolicy",
+      "Properties": {
+        "Queues": [
+          {
+            "Ref": "TelemetryFailureQueue"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${WorkloadAccountId}:root"
+                }
+              },
+              "Action": "sqs:SendMessage",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "TelemetryFailureQueue",
+                  "Arn"
+                ]
+              },
+              "Condition": {
+                "ArnEquals": {
+                  "aws:PrincipalArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${WorkloadAccountId}:role/${WorkloadStackName}-telemetry"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
     }
   },
   "Outputs": {
@@ -7253,6 +7302,11 @@
         "Ref": "ProviderQueue"
       }
     },
+    "WorkloadIntakeUrl": {
+      "Value": {
+        "Fn::Sub": "https://${IntakeApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/lab/evidence"
+      }
+    },
     "WorkloadIntakeArn": {
       "Value": {
         "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${IntakeApi}/lab/POST/evidence"
@@ -7274,6 +7328,14 @@
     "SaasRecordsUrl": {
       "Value": {
         "Fn::Sub": "https://${SaasApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/lab/records"
+      }
+    },
+    "TelemetryFailureQueueArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "TelemetryFailureQueue",
+          "Arn"
+        ]
       }
     }
   },

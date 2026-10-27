@@ -71,7 +71,7 @@ def generate(rng: random.Random, case: str) -> tuple[list[tuple[float, Evidence]
         provider_request_id=uid(),
         **({"invocation_id": None, "action_id": None} if case == "missing-identifiers" else {}),
     )
-    attack = case in {"replay", "copied-identifiers", "response-failure"}
+    attack = case in {"replay", "copied-identifiers", "response-failure", "replay-suppression"}
     if attack or case == "legitimate-retry":
         copied = case in {"copied-identifiers", "legitimate-retry"}
         add(
@@ -100,6 +100,8 @@ def generate(rng: random.Random, case: str) -> tuple[list[tuple[float, Evidence]
         ]
     if case in {"missing-provider", "collector-outage"}:
         items = [(d, e) for d, e in items if e.source_id != "provider"]
+    if case in {"replay-suppression", "benign-log-failure"}:
+        items = [(d, e) for d, e in items if e.source_id != "app"]
     if case == "duplicate":
         items += [(d + 1, e) for d, e in items[:]]
     if case == "out-of-order":
@@ -110,20 +112,33 @@ def generate(rng: random.Random, case: str) -> tuple[list[tuple[float, Evidence]
         "attack": attack,
         "provider_request_ids": provider_ids,
         "start": base,
-        "response_fault_injected": case == "response-failure",
+        "response_failure_exercised": False,
     }
 
 
-def run(directory: Path, seeds: list[int], trials: int) -> dict[str, Any]:
+def run(
+    directory: Path,
+    seeds: list[int],
+    trials: int,
+    cases: tuple[str, ...] = CASES,
+    policy: Policy | None = None,
+) -> dict[str, Any]:
     if trials < 1 or not seeds or len(set(seeds)) != len(seeds):
         raise ValueError("positive trials and distinct seeds required")
+    if (
+        not cases
+        or len(set(cases)) != len(cases)
+        or set(cases) - set(CASES) - {"replay-suppression", "benign-log-failure"}
+    ):
+        raise ValueError("distinct registered scenarios required")
     directory.mkdir(parents=True, exist_ok=False)
-    policy = Policy()
+    policy = policy or Policy()
     protocol = {
         "version": "parameter-holdout-v2",
         "seeds": seeds,
         "trials": trials,
-        "cases": CASES,
+        "cases": cases,
+        "positive_target": "unauthorized OAuth replay",
         "policy": asdict(policy),
         "classification": ("Any alert in 150 seconds counts, including later-revised alerts"),
         "poll_interval_seconds": 5,
@@ -140,7 +155,7 @@ def run(directory: Path, seeds: list[int], trials: int) -> dict[str, Any]:
     completeness = []
     for seed in seeds:
         rng = random.Random(seed)  # noqa: S311 -- deterministic synthetic events, never credentials
-        order = [(case, trial) for case in CASES for trial in range(trials)]
+        order = [(case, trial) for case in cases for trial in range(trials)]
         rng.shuffle(order)
         for case, trial in order:
             arrivals, label = generate(rng, case)
@@ -159,6 +174,7 @@ def run(directory: Path, seeds: list[int], trials: int) -> dict[str, Any]:
                 now = (timestamp(label["start"]) + timedelta(seconds=tick)).isoformat()
                 decisions = reconcile(list(visible.values()), now, health, policy)
                 report = {
+                    "evaluated_at": now,
                     "timeline": [
                         {
                             "event": e.to_dict(),
@@ -170,10 +186,10 @@ def run(directory: Path, seeds: list[int], trials: int) -> dict[str, Any]:
                 }
                 if case == "tampering" and report["timeline"]:
                     report["timeline"][0]["receipt"]["canonical_hash"] = "0" * 64
-                for name, (predicted, _) in predictions(report).items():
+                for name, (predicted, _) in predictions(report, policy).items():
                     if predicted and name not in first_detection:
                         first_detection[name] = tick
-            for detector, (prediction, uncertain) in predictions(report).items():
+            for detector, (prediction, uncertain) in predictions(report, policy).items():
                 rows.append(
                     {
                         "run_id": label["run_id"],

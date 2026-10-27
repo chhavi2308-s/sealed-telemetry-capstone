@@ -19,6 +19,22 @@ from sealed_telemetry.schema import Evidence, canonical, digest, new_event, time
 
 
 def responder(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    if event.get("operation") == "reemit":
+        attempt = event.get("attempt")
+        if type(attempt) is not int or not 1 <= attempt <= 3:
+            raise ValueError("completed attempt 1..3 required")
+        row = (
+            boto3.resource("dynamodb", config=SDK_CONFIG)
+            .Table(os.environ["RESPONSE_HISTORY_TABLE"])
+            .get_item(
+                Key={"response_id": event["approval_id"], "attempt": attempt}, ConsistentRead=True
+            )
+            .get("Item")
+        )
+        if not row or "evidence" not in row:
+            raise ValueError("completed response evidence unavailable")
+        emit(Evidence.parse(json.loads(row["evidence"]), "responder"))
+        return {"status": "historical_evidence_enqueued", "current_containment_verified": False}
     if event.get("approved") is not True:
         return {"status": "approval_required", "verified_at": None}
     if event.get("state") not in {"SUSPICIOUS", "CORROBORATED_SUSPECTED_ABUSE"}:

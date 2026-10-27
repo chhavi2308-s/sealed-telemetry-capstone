@@ -79,6 +79,9 @@
     },
     "SecurityTrailBucketName": {
       "Type": "String"
+    },
+    "TelemetryFailureQueueArn": {
+      "Type": "String"
     }
   },
   "Conditions": {
@@ -416,6 +419,18 @@
               ]
             }
           }
+        },
+        "EventInvokeConfig": {
+          "MaximumEventAgeInSeconds": 3600,
+          "MaximumRetryAttempts": 2,
+          "DestinationConfig": {
+            "OnFailure": {
+              "Type": "SQS",
+              "Destination": {
+                "Ref": "TelemetryFailureQueueArn"
+              }
+            }
+          }
         }
       }
     },
@@ -493,6 +508,15 @@
                   "PlatformIngestLogs",
                   "Arn"
                 ]
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:SendMessage"
+              ],
+              "Resource": {
+                "Ref": "TelemetryFailureQueueArn"
               }
             }
           ]
@@ -658,6 +682,16 @@
               "Ref": "ExpiresOn"
             }
           }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "AppFunctionArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "AppFunction",
+          "Arn"
         ]
       }
     }

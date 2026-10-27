@@ -143,3 +143,24 @@ def test_infrastructure_security_contract():
         r["ResponseWorkflow"]["Properties"]["Definition"]["States"]["ApprovalGate"]["Default"]
         == "Rejected"
     )
+
+
+def test_reemit_is_historical_only_and_never_repeats_effects(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from test_core import event
+
+    monkeypatch.setenv("RESPONSE_HISTORY_TABLE", "history")
+    evidence = event("responder", "RESPONSE_ACTION", operation="token:revoke:verify").to_dict()
+    resource = MagicMock()
+    resource.Table.return_value.get_item.return_value = {"Item": {"evidence": json.dumps(evidence)}}
+    with (
+        patch("sealed_telemetry.cloud_response.boto3.resource", return_value=resource),
+        patch("sealed_telemetry.cloud_response.emit") as emit,
+        patch("sealed_telemetry.cloud_response.https_json") as call,
+    ):
+        result = responder({"operation": "reemit", "approval_id": "approval", "attempt": 1}, None)
+        assert result["current_containment_verified"] is False
+        assert emit.call_args.args[0].to_dict() == evidence
+        call.assert_not_called()
+        resource.Table.return_value.update_item.assert_not_called()

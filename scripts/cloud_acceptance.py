@@ -133,6 +133,9 @@ def run(args: Any) -> dict[str, Any]:
         )
         outcomes.append(observation)
     summary = {
+        "mode": "LIVE_AWS",
+        "scope": "three_review2_core_scenarios_only",
+        "final_acceptance_passed": False,
         "account": args.account,
         "region": args.region,
         "stack": args.stack,

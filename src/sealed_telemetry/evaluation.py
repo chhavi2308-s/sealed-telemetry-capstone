@@ -10,7 +10,7 @@ from typing import Any
 
 from sealed_telemetry.lab import SCENARIOS, run_scenario
 from sealed_telemetry.measurements import percentile, reconstruction
-from sealed_telemetry.reconciliation import Policy, reconcile
+from sealed_telemetry.reconciliation import DEFAULT_POLICY, Policy, reconcile
 from sealed_telemetry.schema import Evidence, canonical, digest, timestamp
 
 
@@ -47,12 +47,16 @@ def metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def predictions(report: dict[str, Any]) -> dict[str, tuple[bool, bool]]:
+def predictions(
+    report: dict[str, Any], policy: Policy = DEFAULT_POLICY
+) -> dict[str, tuple[bool, bool]]:
     events = [Evidence.parse(r["event"], r["event"]["source_id"]) for r in report["timeline"]]
     observed = [e for e in events if e.event_type == "PROVIDER_ACTION"]
     intents = [e for e in events if e.event_type == "INTENT_CREATED"]
     findings = report["decisions"]
-    now = findings[0]["decided_at"] if findings else "2026-10-26T10:01:00+00:00"
+    now = report.get(
+        "evaluated_at", findings[0]["decided_at"] if findings else "2026-10-26T10:01:00+00:00"
+    )
     health = findings[0]["source_health_snapshot"] if findings else {}
     integrity = all(
         digest(r["event"]) == r["receipt"]["canonical_hash"] for r in report["timeline"]
@@ -86,7 +90,9 @@ def predictions(report: dict[str, Any]) -> dict[str, tuple[bool, bool]]:
                 events,
                 now,
                 health,
-                Policy(provider_deadline=0, gateway_deadline=0, app_deadline=0, clock_skew=0),
+                replace(
+                    policy, provider_deadline=0, gateway_deadline=0, app_deadline=0, clock_skew=0
+                ),
             )
         ),
         "without_binding": outcome(
@@ -94,10 +100,11 @@ def predictions(report: dict[str, Any]) -> dict[str, tuple[bool, bool]]:
                 [replace(e, invocation_id="unbound", action_id="unbound") for e in events],
                 now,
                 health,
+                policy,
             )
         ),
         "without_provider": outcome(
-            reconcile([e for e in events if e.source_id != "provider"], now, health)
+            reconcile([e for e in events if e.source_id != "provider"], now, health, policy)
         ),
         "without_integrity": outcome(findings),
     }
