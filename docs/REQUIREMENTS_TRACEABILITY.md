@@ -1,47 +1,30 @@
 # Requirements traceability
 
-The complete source extracts in docs/specifications are the specification register. The table maps all architecture planes and delivery work packages; pending tickets remain requirements, never implied completion. Owner for implementation: Codex; AWS account/budget and independent review: project owner. Acceptance maps to final blueprint §§24, 41, 44 and Review-2 tickets §§7, 18.
+27 October 2026. The full 45-section specification register and hashes are in BLUEPRINT_AUDIT.md and release/blueprint-audit.json. Module filenames below resolve under src/sealed_telemetry/. TESTED means offline/local/Moto/static proof, never live AWS. No requirement is marked DEPLOYED.
 
-| Ticket | Requirement and source | Target | Acceptance/dependency |
+| Requirement | Source / path / proof | Offline status | Cloud/owner acceptance |
 |---|---|---|---|
-| ENG-01 | Foundation, CI, dependency scanning (§28) | pyproject.toml, .github/workflows | lint/type/test/audit; none |
-| LAB-01 | Mock OAuth expiry/scope/audience/revocation (R2-03) | src/sealed_telemetry/provider.py | rejected invalid tokens; ENG-01 |
-| LAB-02 | SaaS synthetic actions, independent durable outbox (R2-04) | provider.py | audit survives app suppression; LAB-01 |
-| LAB-03 | Legitimate Lambda, Secrets Manager, ingress (R2-05) | aws_handlers.py, infra | successful cloud request; LAB-02 |
-| OBS-01 | App/platform/access logs and supported CloudTrail (R2-06) | infra, docs/runbook.md | separate source proof; cloud approval |
-| EVD-01 | Authenticated intake, strict schema, receipts (R2-07) | schema.py, aws_handlers.py | spoof/oversize/invalid rejected |
-| EVD-02 | Queue/DLQ/retry/idempotency/index (F2) | storage.py, infra | duplicate/outage/redrive tests; EVD-01 |
-| EVD-03 | Raw/canonical archive, KMS, Object Lock (F5) | storage.py, infra | tamper detection and AWS deny tests |
-| SEC-01 | Separate accounts/roles, protected evidence (F1) | infra, docs/adr | workload cannot modify evidence; approval |
-| DET-01 | Invocation/action/provider IDs, pseudonyms, bounded fallback (F3) | reconciliation.py | replay without invocation, ambiguity/concurrency |
-| DET-02 | Deadlines, health, late revisions, decision history (F4) | reconciliation.py | T01–T16; EVD-02 |
-| DEM-01 | Replay/suppression/benign failure (R2-09–12) | cli.py, tests | repeatable local and deployed demo |
-| RSP-01 | EventBridge/Step Functions, policy approval, verified revoke (F6) | response.py, infra | fail/unknown never successful |
-| REC-01 | Rotation, clean deployment, synthetic recovery (F7) | response.py, docs/runbook.md | old fails/new succeeds |
-| FOR-01 | Timeline, gaps, hashes, report (F7) | reporting.py | explicit provenance/uncertainty |
-| EXP-01 | Four baselines and four ablations, independent labels (F9) | experiments, evaluation.py | held-out seeded trials |
-| EXP-02 | Precision/recall/F1/FPR/inconclusive, latency, overhead/cost | evaluation.py | real denominators, no fabricated cloud metrics |
-| OPS-01 | Fault contracts, rollback, budget, cleanup (F10) | docs/runbook.md, scripts | deployed rehearsal; cloud approval |
-| RES-01 | Literature matrix, poster/report/video (final defense) | docs/research | verified sources and review artifacts; EXP-01 |
-| OPT-01 | Optional real authorized provider (F8) | future adapter | explicit separate authorization |
+| ENG-01 foundation | pyproject, three exact locks, CI, source lint/type tests, wheel/clean install; results/verification-20261027.json | TESTED | BLOCKED: remote CI/review |
+| LAB-01 OAuth lifecycle | provider.py/cloud_lab.py; expiry/audience/scope/revoke and response tests | TESTED | BLOCKED: actual serverless calls |
+| LAB-02 provider-owned observations | provider outbox, stream forwarder, dedicated source queue; test_cloud_lab/test_redrive | TESTED | BLOCKED: real delivery/outage/stream exhaustion |
+| LAB-03 legitimate serverless flow | gateway, issuer, workload and SaaS APIs/functions in infra | IMPLEMENTED | BLOCKED: deploy/readiness/smoke |
+| OBS-01 supplementary AWS evidence | telemetry.py; source-whitelist/gzip/version tests; account-native trails, central native storage, platform/failure queues | TESTED | BLOCKED: native coverage/digest validation |
+| EVD-01 source/schema/receipt authority | schema.py/aws_handlers.py/JSON schema; source forgery, byte-limit, no raw rejection body tests | TESTED | BLOCKED: live IAM/API denial |
+| EVD-02 queue/retry/idempotency/recovery | source ARN binding, source namespaces, partial batches, reviewed redrive/outbox replay; archive/index recovery tests | TESTED | BLOCKED: real fault rehearsal |
+| EVD-03 archival/integrity/retention | KMS, versioned Object Lock archive, receipts and exact-version exports; test_aws/test_export | TESTED | BLOCKED: enforcement/recovery/cost; per-record receipt decision in ADR 001 |
+| SEC-01 account isolation/IAM | generated security/workload profiles, permission boundary, scoped policies, retained bucket policies; test_release_security | TESTED | BLOCKED: actual role/account-admin denials and propagation |
+| DET-01 IBER correlation | reconciliation.py; native/logical identifier caveats, bounded joins, no fabricated external invocation; test_core/test_identifiability | TESTED | BLOCKED: live traces |
+| DET-02 deadlines/health/revisions/capacity | cloud_detector.py, configurable policy, immutable decision history, explicit overflow, cursor/page bounds | TESTED | BLOCKED: measured benign calibration/high-load/coverage |
+| DEM-01 Review-2 normal/replay/suppression/benign fault | cli.py/lab.py; scripts/cloud_demo.py/cloud_acceptance.py | TESTED locally | BLOCKED: actual AWS finding/evidence/timestamps/video |
+| RSP-01 approved verified response | approvals.py/cloud_response.py; encrypted callback, stale-revision atomic denial, leases/attempt records and split verification tests | TESTED | BLOCKED: live operator/response faults |
+| REC-01 restoration | approved credential/integration recovery and fail-closed tests; known-good deployment runbook | TESTED for scoped model | BLOCKED: live clean-code recovery and ADR 003 read-only-data scope approval |
+| FOR-01 reconstruction/reporting | cloud_reporting.py/reporting.py; reports API, version/hash manifest, decision history and export_response.py | TESTED | BLOCKED: live export and completeness assessment |
+| EXP-01 baselines/ablations/held-out trials | evaluation.py/holdout.py/study.py; disjoint calibration/test scenarios, independent seeds/labels/frozen policy | TESTED synthetic | BLOCKED: cloud and independent external validation |
+| EXP-02 metrics | real confusion counts, Wilson summaries, virtual latency/reconstruction, actual local runtime; explicit null cloud fields | TESTED synthetic | BLOCKED: actual AWS latency, overhead, response latency and bills |
+| OPS-01 operational safeguards | preflight/cleanup/redrive/operator tools, exact transformed inventory, budget/dashboard/alarms, rollback/drain procedures; test_operator_safety | TESTED offline gates | BLOCKED: actual target/change set, notifications, rollback/teardown |
+| RES-01 handover/review | technical report, onboarding, architecture, failure contracts, research limitations, current milestone report | IMPLEMENTED | BLOCKED: owner/reviewer signoff and actual cloud artifacts |
+| OPT-01 real third-party provider | Blueprint optional provider integration; no credentials or attacks against real SaaS | OUT OF SCOPE | New explicit authorization required |
 
+Evidence is scoped: service emulation cannot establish real account isolation; hashes cannot establish truth/completeness; health is not coverage attestation; virtual time cannot establish cloud latency. The empirical recall target is not silently substituted for an engineering goal. Copied-ID attacks remain positive ground truth even when IBER returns INCONCLUSIVE.
 
-## Verified implementation checkpoint
-
-| Ticket | Actual implementation and proof | Status |
-|---|---|---|
-| ENG-01 | pyproject, exact locks, pinned/read-only CI; 63 passing tests, Ruff, strict mypy, SAM validate/build | Local foundation verified; remote CI pending |
-| LAB-01/02 | provider.py and cloud_lab.py; test_provider_security_and_verified_response, test_issuer_and_provider_outbox, stream acknowledgement regression | Local/Moto verified; live provider pending |
-| LAB-03 | cloud_lab.gateway/app, WorkloadApi, issuer and SaaS APIs | Packaged candidate; no deployed 200 response claimed |
-| OBS-01 | JSON app logs, default platform logs and API access-log groups in template | Supplementary archive adapters and configured CloudTrail coverage pending KI-04 |
-| EVD-01 | aws_handlers.collector, schema.py, schemas/evidence-v1.schema.json | Source spoof/unknown/oversize/content conflict tests pass; live IAM test pending |
-| EVD-02/03 | partial SQS batches, S3-first conditional index, active TTL, newest health, exact-version export | Recovery/idempotency/tampering tests pass; live DLQ/retention/deny rehearsal pending |
-| SEC-01 | own-function log policies, source-role-bound intake, workload archive denial, separate response key/role | Static/Moto checks; final cross-account authorization pending |
-| DET-01/02 | reconciliation.py, transactional cloud history, health monitor and configurable policy | All five states tested; duplicates/retries, clock skew, late state revision, cross-run replay and invalid policy handled |
-| DEM-01 | cli.py and scripts/cloud_demo.py; docs/results/demo | Three local demos verified; live AWS Review-2 not complete |
-| RSP-01 | cloud_response.py, EventBridge/Step Functions, explicit approval output, response-key lookup | Mock-provider rejection, failed verification and idempotent evidence tested; live execution pending |
-| REC-01 | local containment-recovery, integration disable/restore and clean-code runbook | Local verified; cloud recovery and modified-resource restore pending |
-| FOR-01 | reporting.py and scripts/export_incident.py | Exact S3 version/hash checks tested; investigator export not yet exercised on AWS |
-| EXP-01/02 | fifteen scenarios, eight detectors/ablations, seed manifest, separate labels, metrics and calibration functions | 30 local smoke runs measured; held-out AWS latency/overhead/cost are null/pending |
-| OPS-01 | preflight.py, cleanup.py, failure-contracts and runbook | Read-only gates and explicit deletion flags implemented; deployment/rollback/cleanup unverified |
-| RES-01/OPT-01 | Original references preserved; research protocol and explicit limitations | Novelty/literature comparison, final artifacts and optional real authorized provider remain unfinished |
+Historical checkpoint: c359d8b reported and independently passed 63 tests. Later commits implement the gaps above; current test counts/results come from the dated JUnit/verification files, not that historical statement. Requirements whose final acceptance needs AWS remain BLOCKED until the approved live checks succeed.

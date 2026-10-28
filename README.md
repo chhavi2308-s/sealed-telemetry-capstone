@@ -49,3 +49,7 @@ pip-audit --vulnerability-service osv --no-deps --disable-pip -r requirements.lo
 ```
 
 CI performs these checks without deployment permissions. Lock snapshots include exact transitive versions. AWS deployment requires account, region, role, budget, retention and change-set review; no long-lived keys belong in this repository. See scripts/preflight.py and docs/runbook.md. No automatic deployment runs on push.
+
+## Review-2 handover
+
+Start with docs/review-2-showcase/REVIEW2_READINESS.md and IMPLEMENTATION_EXPLAINED.md. The package includes architecture sequences, live/fallback runbook, presentation,56 viva answers and evidence classifications. No AWS deployment is claimed.

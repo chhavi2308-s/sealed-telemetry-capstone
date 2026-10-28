@@ -1,20 +1,22 @@
-# Known issues and acceptance gaps
+# Known issues and residual risks
 
-| ID | Issue | Impact and next action |
+27 October 2026. Offline controls and their limits are separated below. No known failing test is waived or skipped.
+
+| ID | Status | Issue / required evidence |
 |---|---|---|
-| KI-01 | Account, region, temporary deployment role/profile, owner/expiry, budget cap and retention approval not supplied | Blocks live deployment. Run scripts/preflight.py only with confirmed values; inspect change set before execution |
-| KI-02 | Live AWS security/reliability not exercised | Moto and static policy tests do not prove real role denial, Object Lock enforcement, propagation, retries, costs or teardown. Execute live acceptance in runbook |
-| KI-03 | Single-account Review-2 candidate only | Separate roles are implemented; separate security/workload accounts, cross-account policy and organization guardrails remain a final-profile task requiring ownership approval |
-| KI-04 | Supplementary platform and selected CloudTrail ingestion implemented offline; live subscriptions not exercised | Adapters whitelist metadata, preserve native IDs and bind versioned S3 input. Separate queues prevent forged provider source identity. EnableSupplementary defaults false; cloud coverage/cost still requires approval |
-| KI-05 | Operational health is not a completeness attestation | Monitor checks deployment state, queue conditions and pending outbox lag. Coverage gaps and correlated provider/control-plane failures remain uncertain |
-| KI-06 | Provisional deadlines and scale bounds | Benign delivery calibration has not run on AWS. More than 1000 records for one credential fails visibly; active batches need load tests and partitioned scheduling. Long outages may exhaust SQS/stream retention |
-| KI-07 | No rehearsed automated DLQ/expired-stream redrive | Raw outbox/archives remain retained and manual recovery is documented; automate authorized replay and prove it in a fault experiment |
-| KI-08 | Mock OAuth interface is deliberately limited | IAM-authorized JSON client credentials and read/export scopes work. No standards-complete OAuth authorization-code flow or public RFC 7009 revoke endpoint; responder uses scoped internal registry operations |
-| KI-09 | Operator IAM cases HTTP API implemented; dashboard still backlog | GET /v1/cases/{case_id} and callback approval endpoints exist in SAM; not deployed |
-| KI-10 | Cloud callback approval implemented offline; live verification pending | Encrypted callback tokens, operator IAM role matching, action-bound expiring proof, leased response attempts and immutable attempt history replace boolean authorization. Revocation requires provider denial reason/request ID; arbitrary 403 is insufficient. Live callback/expiry/concurrency acceptance remains required |
-| KI-11 | Recovery scope | Local token revocation/rotation and integration disable/restore are tested; synthetic data is read-only. Cloud clean-code redeployment and restoration of modified resources have not been rehearsed |
-| KI-12 | Research evidence is a local smoke dataset | Fifteen curated scenarios and virtual event time do not establish held-out effectiveness, a detection SLA, invocation overhead, AWS cost or novelty. Correlated-ID retries remain inconclusive; do not relabel them malicious to inflate recall |
-| KI-13 | Windows long paths | SAM cached dependency paths fail under the original long checkout. Native validation and non-cached build succeed from a hash-verified short source path. Clone/build in a short path or use Linux CI |
-| KI-14 | Remote review not performed | Local commits only; no branch pushed, PR created, teammate signoff, release tag, screenshots/video or final report/poster |
+| KI-01 | BLOCKED | Target account(s), region, SSO/profile, CloudFormation role, artifact bucket, budget/notifications, Owner/ExpiresOn and retention approval are unconfirmed. No AWS preflight has run |
+| KI-02 | BLOCKED | Actual IAM denial, Object Lock/KMS enforcement, cloud delivery/retry/stream expiry, deployment/rollback/cleanup and alert delivery require approved live acceptance |
+| KI-03 | IMPLEMENTED | Separate security/workload templates and permission boundary exist. Cross-account policy propagation, account-admin boundaries and native trail delivery remain unverified live |
+| KI-04 | IMPLEMENTED | Supplementary adapters/trails/queues exist; CloudTrail covers selected AWS APIs, not SaaS HTTPS. Platform messages can be spoofed in a compromised environment. Native digest-signature validation and delivery coverage require live evidence |
+| KI-05 | TESTED | Health records report observed availability/configuration and lag, not a completeness attestation or a complete historical coverage model. Retention loss and correlated security/provider failures can remain unobservable |
+| KI-06 | TESTED | Reconciliation is bounded: 1,000 records per credential, ten active credentials and at most twenty scan pages per sweep. Overflow is INCONCLUSIVE and does not halt other groups. Active windows are finite; high load/long outages require measured capacity/partitioning and may delay or miss automatic evaluation. No production-scale/SLA claim |
+| KI-07 | TESTED | Queue-pair/digest-bound redrive and original outbox replay are implemented. Stream failure metadata must not be treated as raw evidence; real exhausted-stream and poison-message recovery need rehearsal. Invalid raw bodies are intentionally not retained in quarantine |
+| KI-08 | TESTED | Mock IAM JSON client-credentials and idempotent /oauth/revoke work with read/export scopes. This is not a standards-complete OAuth authorization server or RFC 7009 form endpoint |
+| KI-09 | IMPLEMENTED | Cases/report APIs and operational dashboard exist. API results are bounded/truncation-labelled; paginated SDK exports provide full scoped data up to the documented report bound. No bespoke investigator UI is claimed |
+| KI-10 | TESTED | Approval is action/current-revision bound; attempts are leased and recorded. Generic denial or an already disabled integration cannot prove per-token revocation. Ambiguous callback/partial outcomes remain unverified; operator recovery/new approval may be needed |
+| KI-11 | BLOCKED | Credential/integration restoration is implemented; real clean-code redeployment and recovery are not rehearsed. Synthetic records are read-only; arbitrary modified-data restoration is an explicit ADR 003 scope decision awaiting owner review |
+| KI-12 | TESTED | Copied identifiers and legitimate retries can be observationally identical. Those attacks remain false negatives/inconclusive. Synthetic scenario-disjoint results are not blind independent validation, a population error bound, novelty proof or cloud performance evidence |
+| KI-13 | IMPLEMENTED | Windows long-path/cross-sandbox directory permissions can block cached builds. Use a writable short source path, verified hashes, a local wheelhouse/non-cached SAM build or Linux CI. No validation failure is hidden by this workaround |
+| KI-14 | BLOCKED | Remote CI, teammate/reviewer signoff, approved release tag and actual cloud screenshots/video are absent. Final AWS metrics and real bill reconciliation remain null |
 
-No known failing tests are hidden or skipped. These gaps prevent a final-system completion claim.
+Security-account/provider administrators and coordinated compromise of protected storage/receipt trust remain outside the initial workload-compromise assumption. Governance retention does not withstand an authorized bypass administrator or destruction of the decryption key. Preserve uncertainty; never turn a telemetry gap into confirmed token theft.

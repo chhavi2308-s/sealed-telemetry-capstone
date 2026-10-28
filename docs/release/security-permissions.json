@@ -1,0 +1,3176 @@
+[
+  {
+    "logical_id": "ApprovalApiFunctionDecidePermissionlab",
+    "Type": "AWS::Lambda::Permission",
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Ref": "ApprovalApiFunction"
+      },
+      "Principal": "apigateway.amazonaws.com",
+      "SourceArn": {
+        "Fn::Sub": [
+          "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/POST/v1/approvals/*",
+          {
+            "__ApiId__": {
+              "Ref": "OperatorApi"
+            },
+            "__Stage__": "*"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "ApprovalApiFunctionGetPermissionlab",
+    "Type": "AWS::Lambda::Permission",
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Ref": "ApprovalApiFunction"
+      },
+      "Principal": "apigateway.amazonaws.com",
+      "SourceArn": {
+        "Fn::Sub": [
+          "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/v1/approvals/*",
+          {
+            "__ApiId__": {
+              "Ref": "OperatorApi"
+            },
+            "__Stage__": "*"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "ApprovalApiFunctionListPermissionlab",
+    "Type": "AWS::Lambda::Permission",
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Ref": "ApprovalApiFunction"
+      },
+      "Principal": "apigateway.amazonaws.com",
+      "SourceArn": {
+        "Fn::Sub": [
+          "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/v1/approvals",
+          {
+            "__ApiId__": {
+              "Ref": "OperatorApi"
+            },
+            "__Stage__": "*"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "ApprovalApiPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "ApprovalApiAccess",
+      "Roles": [
+        {
+          "Ref": "ApprovalApiRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:GetItem",
+              "dynamodb:UpdateItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "Approvals",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:Query"
+            ],
+            "Resource": {
+              "Fn::Sub": "${Approvals.Arn}/index/StatusIndex"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "kms:Decrypt"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "ApprovalKey",
+                "Arn"
+              ]
+            },
+            "Condition": {
+              "StringEquals": {
+                "kms:EncryptionContext:purpose": "sealed-approval"
+              }
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "states:SendTaskSuccess"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "states:GetExecutionHistory"
+            ],
+            "Resource": {
+              "Fn::Sub": "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:execution:${ResponseWorkflow.Name}:*"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "execute-api:Invoke"
+            ],
+            "Resource": {
+              "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${IntakeApi}/lab/POST/evidence"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::Sub": "${ApprovalApiLogs.Arn}:*"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:GetItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "Decisions",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "ApprovalApiRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "ApprovalBrokerPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "ApprovalBrokerAccess",
+      "Roles": [
+        {
+          "Ref": "ApprovalBrokerRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:PutItem",
+              "dynamodb:GetItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "Approvals",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "kms:Encrypt"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "ApprovalKey",
+                "Arn"
+              ]
+            },
+            "Condition": {
+              "StringEquals": {
+                "kms:EncryptionContext:purpose": "sealed-approval"
+              }
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::Sub": "${ApprovalBrokerLogs.Arn}:*"
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "ApprovalBrokerRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "ArchivePolicy",
+    "Type": "AWS::S3::BucketPolicy",
+    "Properties": {
+      "Bucket": {
+        "Ref": "Archive"
+      },
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Deny",
+            "Principal": "*",
+            "Action": "s3:*",
+            "Resource": [
+              {
+                "Fn::GetAtt": [
+                  "Archive",
+                  "Arn"
+                ]
+              },
+              {
+                "Fn::Sub": "${Archive.Arn}/*"
+              }
+            ],
+            "Condition": {
+              "Bool": {
+                "aws:SecureTransport": "false"
+              }
+            }
+          },
+          {
+            "Effect": "Deny",
+            "Principal": "*",
+            "Action": "s3:*",
+            "Resource": [
+              {
+                "Fn::GetAtt": [
+                  "Archive",
+                  "Arn"
+                ]
+              },
+              {
+                "Fn::Sub": "${Archive.Arn}/*"
+              }
+            ],
+            "Condition": {
+              "ArnEquals": {
+                "aws:PrincipalArn": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${WorkloadAccountId}:role/${WorkloadStackName}-app"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "DeletionPolicy": "Retain",
+    "UpdateReplacePolicy": "Retain"
+  },
+  {
+    "logical_id": "AuditForwarderLogPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "OwnFunctionLogsOnly",
+      "Roles": [
+        {
+          "Ref": "AuditForwarderRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "AuditForwarderLogs",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "AuditForwarderPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "LabResourceAccess",
+      "Roles": [
+        {
+          "Ref": "AuditForwarderRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:DescribeStream",
+              "dynamodb:GetRecords",
+              "dynamodb:GetShardIterator"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "ProviderOutbox",
+                "StreamArn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:ListStreams"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "ProviderOutbox",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sqs:SendMessage"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "AuditFailureQueue",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:UpdateItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "ProviderOutbox",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sqs:SendMessage"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "ProviderQueue",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "AuditForwarderRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "CasesFunctionGetPermissionlab",
+    "Type": "AWS::Lambda::Permission",
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Ref": "CasesFunction"
+      },
+      "Principal": "apigateway.amazonaws.com",
+      "SourceArn": {
+        "Fn::Sub": [
+          "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/v1/cases/*",
+          {
+            "__ApiId__": {
+              "Ref": "OperatorApi"
+            },
+            "__Stage__": "*"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "CasesPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "CasesAccess",
+      "Roles": [
+        {
+          "Ref": "CasesRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:Query"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "Decisions",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::Sub": "${CasesLogs.Arn}:*"
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "CasesRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "CloudTrailIngestLogPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "OwnLogs",
+      "Roles": [
+        {
+          "Ref": "CloudTrailIngestRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "CloudTrailIngestLogs",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "CloudTrailIngestPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "ScopedServiceAccess",
+      "Roles": [
+        {
+          "Ref": "CloudTrailIngestRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sqs:SendMessage"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "CloudTrailQueue",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "s3:GetObjectVersion"
+            ],
+            "Resource": {
+              "Fn::Sub": "${TrailBucket.Arn}/AWSLogs/*"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sqs:SendMessage"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "TelemetryFailureQueue",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "CloudTrailIngestRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "CloudTrailQueueTransportPolicy",
+    "Type": "AWS::SQS::QueuePolicy",
+    "Properties": {
+      "Queues": [
+        {
+          "Ref": "CloudTrailQueue"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Deny",
+            "Principal": "*",
+            "Action": "sqs:*",
+            "Resource": {
+              "Fn::GetAtt": [
+                "CloudTrailQueue",
+                "Arn"
+              ]
+            },
+            "Condition": {
+              "Bool": {
+                "aws:SecureTransport": "false"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "CollectorFunctionIntakePermissionlab",
+    "Type": "AWS::Lambda::Permission",
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Ref": "CollectorFunction"
+      },
+      "Principal": "apigateway.amazonaws.com",
+      "SourceArn": {
+        "Fn::Sub": [
+          "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/POST/evidence",
+          {
+            "__ApiId__": {
+              "Ref": "IntakeApi"
+            },
+            "__Stage__": "*"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "CollectorLogPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "OwnFunctionLogsOnly",
+      "Roles": [
+        {
+          "Ref": "CollectorRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "CollectorLogs",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "CollectorPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "LabResourceAccess",
+      "Roles": [
+        {
+          "Ref": "CollectorRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sqs:SendMessage"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "EvidenceQueue",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "CollectorRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "DetectorFunctionSweepPermission",
+    "Type": "AWS::Lambda::Permission",
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Ref": "DetectorFunction"
+      },
+      "Principal": "events.amazonaws.com",
+      "SourceArn": {
+        "Fn::GetAtt": [
+          "DetectorFunctionSweep",
+          "Arn"
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "DetectorLogPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "OwnFunctionLogsOnly",
+      "Roles": [
+        {
+          "Ref": "DetectorRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "DetectorLogs",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "DetectorPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "LabResourceAccess",
+      "Roles": [
+        {
+          "Ref": "DetectorRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:Scan"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "ActiveCredentials",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:Query"
+            ],
+            "Resource": {
+              "Fn::Sub": "${Events.Arn}/index/CredentialIndex"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:PutItem",
+              "dynamodb:GetItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "Decisions",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "events:PutEvents"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "FindingsBus",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:GetItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "SourceHealth",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:GetItem",
+              "dynamodb:PutItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "ActiveCredentials",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "DetectorRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "DispatchInvokePermission",
+    "Type": "AWS::Lambda::Permission",
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Ref": "DispatchFunction"
+      },
+      "Principal": "events.amazonaws.com",
+      "SourceAccount": {
+        "Ref": "AWS::AccountId"
+      },
+      "SourceArn": {
+        "Fn::GetAtt": [
+          "FindingRoute",
+          "Arn"
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "DispatchPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "StartReviewedWorkflow",
+      "Roles": [
+        {
+          "Ref": "DispatchRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "states:StartExecution"
+            ],
+            "Resource": {
+              "Ref": "ResponseWorkflow"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::Sub": "${DispatchLogs.Arn}:*"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sqs:SendMessage"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "AuditFailureQueue",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "DispatchRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "EvidenceQueueTransportPolicy",
+    "Type": "AWS::SQS::QueuePolicy",
+    "Properties": {
+      "Queues": [
+        {
+          "Ref": "EvidenceQueue"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Deny",
+            "Principal": "*",
+            "Action": "sqs:*",
+            "Resource": {
+              "Fn::GetAtt": [
+                "EvidenceQueue",
+                "Arn"
+              ]
+            },
+            "Condition": {
+              "Bool": {
+                "aws:SecureTransport": "false"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "GatewayFunctionRunPermissionlab",
+    "Type": "AWS::Lambda::Permission",
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Ref": "GatewayFunction"
+      },
+      "Principal": "apigateway.amazonaws.com",
+      "SourceArn": {
+        "Fn::Sub": [
+          "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/POST/run",
+          {
+            "__ApiId__": {
+              "Ref": "WorkloadApi"
+            },
+            "__Stage__": "*"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "GatewayLogPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "OwnFunctionLogsOnly",
+      "Roles": [
+        {
+          "Ref": "GatewayRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "GatewayLogs",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "GatewayPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "LabResourceAccess",
+      "Roles": [
+        {
+          "Ref": "GatewayRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "execute-api:Invoke"
+            ],
+            "Resource": {
+              "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${IntakeApi}/lab/POST/evidence"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "lambda:InvokeFunction"
+            ],
+            "Resource": [
+              {
+                "Fn::GetAtt": [
+                  "IssuerFunction",
+                  "Arn"
+                ]
+              },
+              {
+                "Fn::Sub": "arn:${AWS::Partition}:lambda:${AWS::Region}:${WorkloadAccountId}:function:${WorkloadStackName}-app"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "GatewayRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ],
+      "RoleName": {
+        "Fn::Sub": "${AWS::StackName}-gateway"
+      }
+    }
+  },
+  {
+    "logical_id": "HealthFunctionHeartbeatPermission",
+    "Type": "AWS::Lambda::Permission",
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Ref": "HealthFunction"
+      },
+      "Principal": "events.amazonaws.com",
+      "SourceArn": {
+        "Fn::GetAtt": [
+          "HealthFunctionHeartbeat",
+          "Arn"
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "HealthLogPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "OwnFunctionLogsOnly",
+      "Roles": [
+        {
+          "Ref": "HealthRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "HealthLogs",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "HealthPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "ReadOperationalHealth",
+      "Roles": [
+        {
+          "Ref": "HealthRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "lambda:GetFunctionConfiguration"
+            ],
+            "Resource": [
+              {
+                "Fn::GetAtt": [
+                  "GatewayFunction",
+                  "Arn"
+                ]
+              },
+              {
+                "Fn::GetAtt": [
+                  "SaasFunction",
+                  "Arn"
+                ]
+              },
+              {
+                "Fn::GetAtt": [
+                  "AuditForwarderFunction",
+                  "Arn"
+                ]
+              },
+              {
+                "Fn::GetAtt": [
+                  "CollectorFunction",
+                  "Arn"
+                ]
+              },
+              {
+                "Fn::GetAtt": [
+                  "NormalizerFunction",
+                  "Arn"
+                ]
+              }
+            ]
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sqs:GetQueueAttributes"
+            ],
+            "Resource": [
+              {
+                "Fn::GetAtt": [
+                  "DLQ",
+                  "Arn"
+                ]
+              },
+              {
+                "Fn::GetAtt": [
+                  "AuditFailureQueue",
+                  "Arn"
+                ]
+              }
+            ]
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "cloudwatch:GetMetricStatistics"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:Query"
+            ],
+            "Resource": {
+              "Fn::Sub": "${ProviderOutbox.Arn}/index/PendingIndex"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "execute-api:Invoke"
+            ],
+            "Resource": {
+              "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${IntakeApi}/lab/POST/evidence"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sqs:GetQueueAttributes"
+            ],
+            "Resource": [
+              {
+                "Fn::GetAtt": [
+                  "ProviderQueue",
+                  "Arn"
+                ]
+              },
+              {
+                "Fn::GetAtt": [
+                  "ProviderDLQ",
+                  "Arn"
+                ]
+              }
+            ]
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sts:AssumeRole"
+            ],
+            "Resource": {
+              "Fn::Sub": "arn:${AWS::Partition}:iam::${WorkloadAccountId}:role/${WorkloadStackName}-observation"
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "HealthRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ],
+      "RoleName": {
+        "Fn::Sub": "${AWS::StackName}-health"
+      }
+    }
+  },
+  {
+    "logical_id": "IssuerFunctionIssueTokenPermissionlab",
+    "Type": "AWS::Lambda::Permission",
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Ref": "IssuerFunction"
+      },
+      "Principal": "apigateway.amazonaws.com",
+      "SourceArn": {
+        "Fn::Sub": [
+          "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/POST/oauth/token",
+          {
+            "__ApiId__": {
+              "Ref": "WorkloadApi"
+            },
+            "__Stage__": "*"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "IssuerFunctionRevokePermissionlab",
+    "Type": "AWS::Lambda::Permission",
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Ref": "IssuerFunction"
+      },
+      "Principal": "apigateway.amazonaws.com",
+      "SourceArn": {
+        "Fn::Sub": [
+          "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/POST/oauth/revoke",
+          {
+            "__ApiId__": {
+              "Ref": "WorkloadApi"
+            },
+            "__Stage__": "*"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "IssuerLogPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "OwnFunctionLogsOnly",
+      "Roles": [
+        {
+          "Ref": "IssuerRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "IssuerLogs",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "IssuerPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "LabResourceAccess",
+      "Roles": [
+        {
+          "Ref": "IssuerRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:PutItem",
+              "dynamodb:GetItem",
+              "dynamodb:UpdateItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "Tokens",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "secretsmanager:GetSecretValue"
+            ],
+            "Resource": {
+              "Ref": "PseudonymSecret"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "kms:Encrypt"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "CredentialKey",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "IssuerRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "NormalizerLogPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "OwnFunctionLogsOnly",
+      "Roles": [
+        {
+          "Ref": "NormalizerRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "NormalizerLogs",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "NormalizerPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "LabResourceAccess",
+      "Roles": [
+        {
+          "Ref": "NormalizerRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sqs:ReceiveMessage",
+              "sqs:DeleteMessage",
+              "sqs:GetQueueAttributes"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "EvidenceQueue",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "s3:PutObject",
+              "s3:GetObject"
+            ],
+            "Resource": {
+              "Fn::Sub": "${Archive.Arn}/evidence/*"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "kms:GenerateDataKey",
+              "kms:Decrypt"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "EvidenceKey",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:PutItem",
+              "dynamodb:GetItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "Events",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:PutItem"
+            ],
+            "Resource": [
+              {
+                "Fn::GetAtt": [
+                  "ActiveCredentials",
+                  "Arn"
+                ]
+              },
+              {
+                "Fn::GetAtt": [
+                  "SourceHealth",
+                  "Arn"
+                ]
+              }
+            ]
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sqs:ReceiveMessage",
+              "sqs:DeleteMessage",
+              "sqs:GetQueueAttributes"
+            ],
+            "Resource": [
+              {
+                "Fn::GetAtt": [
+                  "PlatformQueue",
+                  "Arn"
+                ]
+              },
+              {
+                "Fn::GetAtt": [
+                  "CloudTrailQueue",
+                  "Arn"
+                ]
+              }
+            ]
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sqs:ReceiveMessage",
+              "sqs:DeleteMessage",
+              "sqs:GetQueueAttributes"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "ProviderQueue",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "s3:PutObject"
+            ],
+            "Resource": {
+              "Fn::Sub": "${Archive.Arn}/quarantine/*"
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "NormalizerRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "PlatformIngestLogPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "OwnLogs",
+      "Roles": [
+        {
+          "Ref": "PlatformIngestRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "PlatformIngestLogs",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "PlatformIngestPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "ScopedServiceAccess",
+      "Roles": [
+        {
+          "Ref": "PlatformIngestRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sqs:SendMessage"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "PlatformQueue",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sqs:SendMessage"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "TelemetryFailureQueue",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "PlatformIngestRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "PlatformPermissionGatewayLogs",
+    "Type": "AWS::Lambda::Permission",
+    "Condition": "SupplementaryEnabled",
+    "Properties": {
+      "FunctionName": {
+        "Ref": "PlatformIngestFunction"
+      },
+      "Action": "lambda:InvokeFunction",
+      "Principal": {
+        "Fn::Sub": "logs.${AWS::Region}.amazonaws.com"
+      },
+      "SourceAccount": {
+        "Ref": "AWS::AccountId"
+      },
+      "SourceArn": {
+        "Fn::GetAtt": [
+          "GatewayLogs",
+          "Arn"
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "PlatformPermissionIntakeApiLogs",
+    "Type": "AWS::Lambda::Permission",
+    "Condition": "SupplementaryEnabled",
+    "Properties": {
+      "FunctionName": {
+        "Ref": "PlatformIngestFunction"
+      },
+      "Action": "lambda:InvokeFunction",
+      "Principal": {
+        "Fn::Sub": "logs.${AWS::Region}.amazonaws.com"
+      },
+      "SourceAccount": {
+        "Ref": "AWS::AccountId"
+      },
+      "SourceArn": {
+        "Fn::GetAtt": [
+          "IntakeApiLogs",
+          "Arn"
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "PlatformPermissionSaasApiLogs",
+    "Type": "AWS::Lambda::Permission",
+    "Condition": "SupplementaryEnabled",
+    "Properties": {
+      "FunctionName": {
+        "Ref": "PlatformIngestFunction"
+      },
+      "Action": "lambda:InvokeFunction",
+      "Principal": {
+        "Fn::Sub": "logs.${AWS::Region}.amazonaws.com"
+      },
+      "SourceAccount": {
+        "Ref": "AWS::AccountId"
+      },
+      "SourceArn": {
+        "Fn::GetAtt": [
+          "SaasApiLogs",
+          "Arn"
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "PlatformPermissionSaasLogs",
+    "Type": "AWS::Lambda::Permission",
+    "Condition": "SupplementaryEnabled",
+    "Properties": {
+      "FunctionName": {
+        "Ref": "PlatformIngestFunction"
+      },
+      "Action": "lambda:InvokeFunction",
+      "Principal": {
+        "Fn::Sub": "logs.${AWS::Region}.amazonaws.com"
+      },
+      "SourceAccount": {
+        "Ref": "AWS::AccountId"
+      },
+      "SourceArn": {
+        "Fn::GetAtt": [
+          "SaasLogs",
+          "Arn"
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "PlatformPermissionWorkloadApiLogs",
+    "Type": "AWS::Lambda::Permission",
+    "Condition": "SupplementaryEnabled",
+    "Properties": {
+      "FunctionName": {
+        "Ref": "PlatformIngestFunction"
+      },
+      "Action": "lambda:InvokeFunction",
+      "Principal": {
+        "Fn::Sub": "logs.${AWS::Region}.amazonaws.com"
+      },
+      "SourceAccount": {
+        "Ref": "AWS::AccountId"
+      },
+      "SourceArn": {
+        "Fn::GetAtt": [
+          "WorkloadApiLogs",
+          "Arn"
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "PlatformQueueTransportPolicy",
+    "Type": "AWS::SQS::QueuePolicy",
+    "Properties": {
+      "Queues": [
+        {
+          "Ref": "PlatformQueue"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Deny",
+            "Principal": "*",
+            "Action": "sqs:*",
+            "Resource": {
+              "Fn::GetAtt": [
+                "PlatformQueue",
+                "Arn"
+              ]
+            },
+            "Condition": {
+              "Bool": {
+                "aws:SecureTransport": "false"
+              }
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": {
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${WorkloadAccountId}:root"
+              }
+            },
+            "Action": "sqs:SendMessage",
+            "Resource": {
+              "Fn::GetAtt": [
+                "PlatformQueue",
+                "Arn"
+              ]
+            },
+            "Condition": {
+              "ArnEquals": {
+                "aws:PrincipalArn": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${WorkloadAccountId}:role/${WorkloadStackName}-telemetry"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "ProviderQueueTransportPolicy",
+    "Type": "AWS::SQS::QueuePolicy",
+    "Properties": {
+      "Queues": [
+        {
+          "Ref": "ProviderQueue"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Deny",
+            "Principal": "*",
+            "Action": "sqs:*",
+            "Resource": {
+              "Fn::GetAtt": [
+                "ProviderQueue",
+                "Arn"
+              ]
+            },
+            "Condition": {
+              "Bool": {
+                "aws:SecureTransport": "false"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "ReplayPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "SelectedOutboxReplay",
+      "Roles": [
+        {
+          "Ref": "ReplayRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:GetItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "ProviderOutbox",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sqs:SendMessage"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "ProviderQueue",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::Sub": "${ReplayLogs.Arn}:*"
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "ReplayRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "ReporterFunctionReportPermissionlab",
+    "Type": "AWS::Lambda::Permission",
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Ref": "ReporterFunction"
+      },
+      "Principal": "apigateway.amazonaws.com",
+      "SourceArn": {
+        "Fn::Sub": [
+          "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/POST/v1/reports",
+          {
+            "__ApiId__": {
+              "Ref": "OperatorApi"
+            },
+            "__Stage__": "*"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "ReporterPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "VersionPinnedForensics",
+      "Roles": [
+        {
+          "Ref": "ReporterRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:Query"
+            ],
+            "Resource": [
+              {
+                "Fn::GetAtt": [
+                  "Decisions",
+                  "Arn"
+                ]
+              },
+              {
+                "Fn::Sub": "${Events.Arn}/index/RunIndex"
+              },
+              {
+                "Fn::Sub": "${Events.Arn}/index/CredentialIndex"
+              }
+            ]
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "s3:GetObjectVersion"
+            ],
+            "Resource": {
+              "Fn::Sub": "${Archive.Arn}/evidence/*"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "s3:PutObject"
+            ],
+            "Resource": {
+              "Fn::Sub": "${Archive.Arn}/reports/*"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "kms:Decrypt",
+              "kms:GenerateDataKey"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "EvidenceKey",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "ReporterLogs",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "ReporterRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "ResponderLogPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "OwnFunctionLogsOnly",
+      "Roles": [
+        {
+          "Ref": "ResponderRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "ResponderLogs",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "ResponderPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "LabResponseAccess",
+      "Roles": [
+        {
+          "Ref": "ResponderRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:GetItem",
+              "dynamodb:UpdateItem",
+              "dynamodb:PutItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "Tokens",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:Query"
+            ],
+            "Resource": {
+              "Fn::Sub": "${Tokens.Arn}/index/CredentialIndex"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "kms:Decrypt"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "CredentialKey",
+                "Arn"
+              ]
+            },
+            "Condition": {
+              "StringEquals": {
+                "kms:EncryptionContext:purpose": "sealed-lab-token"
+              }
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:PutItem",
+              "dynamodb:GetItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "Responses",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "execute-api:Invoke"
+            ],
+            "Resource": {
+              "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${IntakeApi}/lab/POST/evidence"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:GetItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "Approvals",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:PutItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "ResponseHistory",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "lambda:InvokeFunction"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "IssuerFunction",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:GetItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "Decisions",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:ConditionCheckItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "Decisions",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:GetItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "ResponseHistory",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "ResponderRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "RouteDLQPolicy",
+    "Type": "AWS::SQS::QueuePolicy",
+    "Properties": {
+      "Queues": [
+        {
+          "Ref": "AuditFailureQueue"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "events.amazonaws.com"
+            },
+            "Action": "sqs:SendMessage",
+            "Resource": {
+              "Fn::GetAtt": [
+                "AuditFailureQueue",
+                "Arn"
+              ]
+            },
+            "Condition": {
+              "ArnEquals": {
+                "aws:SourceArn": {
+                  "Fn::GetAtt": [
+                    "FindingRoute",
+                    "Arn"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "SaasFunctionExportPermissionlab",
+    "Type": "AWS::Lambda::Permission",
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Ref": "SaasFunction"
+      },
+      "Principal": "apigateway.amazonaws.com",
+      "SourceArn": {
+        "Fn::Sub": [
+          "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/export",
+          {
+            "__ApiId__": {
+              "Ref": "SaasApi"
+            },
+            "__Stage__": "*"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "SaasFunctionReadPermissionlab",
+    "Type": "AWS::Lambda::Permission",
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Ref": "SaasFunction"
+      },
+      "Principal": "apigateway.amazonaws.com",
+      "SourceArn": {
+        "Fn::Sub": [
+          "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${__ApiId__}/${__Stage__}/GET/records",
+          {
+            "__ApiId__": {
+              "Ref": "SaasApi"
+            },
+            "__Stage__": "*"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "SaasLogPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "OwnFunctionLogsOnly",
+      "Roles": [
+        {
+          "Ref": "SaasRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "SaasLogs",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "SaasPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "LabResourceAccess",
+      "Roles": [
+        {
+          "Ref": "SaasRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:GetItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "Tokens",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "dynamodb:PutItem"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "ProviderOutbox",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "SaasRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "TrailBucketPolicy",
+    "Type": "AWS::S3::BucketPolicy",
+    "Properties": {
+      "Bucket": {
+        "Ref": "TrailBucket"
+      },
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "cloudtrail.amazonaws.com"
+            },
+            "Action": "s3:GetBucketAcl",
+            "Resource": {
+              "Fn::GetAtt": [
+                "TrailBucket",
+                "Arn"
+              ]
+            },
+            "Condition": {
+              "StringEquals": {
+                "aws:SourceArn": {
+                  "Fn::Sub": "arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${AWS::StackName}-aws-api"
+                }
+              }
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "cloudtrail.amazonaws.com"
+            },
+            "Action": "s3:PutObject",
+            "Resource": {
+              "Fn::Sub": "${TrailBucket.Arn}/AWSLogs/${AWS::AccountId}/*"
+            },
+            "Condition": {
+              "StringEquals": {
+                "aws:SourceArn": {
+                  "Fn::Sub": "arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${AWS::StackName}-aws-api"
+                },
+                "s3:x-amz-acl": "bucket-owner-full-control"
+              }
+            }
+          },
+          {
+            "Effect": "Deny",
+            "Principal": "*",
+            "Action": "s3:*",
+            "Resource": [
+              {
+                "Fn::GetAtt": [
+                  "TrailBucket",
+                  "Arn"
+                ]
+              },
+              {
+                "Fn::Sub": "${TrailBucket.Arn}/*"
+              }
+            ],
+            "Condition": {
+              "Bool": {
+                "aws:SecureTransport": "false"
+              }
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "cloudtrail.amazonaws.com"
+            },
+            "Action": "s3:GetBucketAcl",
+            "Resource": {
+              "Fn::GetAtt": [
+                "TrailBucket",
+                "Arn"
+              ]
+            },
+            "Condition": {
+              "StringEquals": {
+                "aws:SourceArn": {
+                  "Fn::Sub": "arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${WorkloadAccountId}:trail/${WorkloadStackName}-aws-api"
+                }
+              }
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "cloudtrail.amazonaws.com"
+            },
+            "Action": "s3:PutObject",
+            "Resource": {
+              "Fn::Sub": "${TrailBucket.Arn}/AWSLogs/${WorkloadAccountId}/*"
+            },
+            "Condition": {
+              "StringEquals": {
+                "aws:SourceArn": {
+                  "Fn::Sub": "arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${WorkloadAccountId}:trail/${WorkloadStackName}-aws-api"
+                },
+                "s3:x-amz-acl": "bucket-owner-full-control"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "DeletionPolicy": "Retain",
+    "UpdateReplacePolicy": "Retain"
+  },
+  {
+    "logical_id": "TrailInvokePermission",
+    "Type": "AWS::Lambda::Permission",
+    "Properties": {
+      "FunctionName": {
+        "Ref": "CloudTrailIngestFunction"
+      },
+      "Action": "lambda:InvokeFunction",
+      "Principal": "s3.amazonaws.com",
+      "SourceAccount": {
+        "Ref": "AWS::AccountId"
+      },
+      "SourceArn": {
+        "Fn::Sub": [
+          "arn:${AWS::Partition}:s3:::${Name}",
+          {
+            "Name": {
+              "Fn::Sub": [
+                "${AWS::AccountId}-${AWS::Region}-sealed-audit-${Suffix}",
+                {
+                  "Suffix": {
+                    "Fn::Select": [
+                      0,
+                      {
+                        "Fn::Split": [
+                          "-",
+                          {
+                            "Fn::Select": [
+                              2,
+                              {
+                                "Fn::Split": [
+                                  "/",
+                                  {
+                                    "Ref": "AWS::StackId"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "WorkflowRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "states.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole",
+            "Condition": {
+              "StringEquals": {
+                "aws:SourceAccount": {
+                  "Ref": "AWS::AccountId"
+                }
+              },
+              "ArnLike": {
+                "aws:SourceArn": {
+                  "Fn::Sub": "arn:${AWS::Partition}:states:${AWS::Region}:${AWS::AccountId}:stateMachine:*"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Policies": [
+        {
+          "PolicyName": "InvokeResponse",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "lambda:InvokeFunction"
+                ],
+                "Resource": [
+                  {
+                    "Fn::GetAtt": [
+                      "ResponderFunction",
+                      "Arn"
+                    ]
+                  },
+                  {
+                    "Fn::GetAtt": [
+                      "ApprovalBrokerFunction",
+                      "Arn"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "WorkloadTelemetryFailurePolicy",
+    "Type": "AWS::SQS::QueuePolicy",
+    "Properties": {
+      "Queues": [
+        {
+          "Ref": "TelemetryFailureQueue"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": {
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${WorkloadAccountId}:root"
+              }
+            },
+            "Action": "sqs:SendMessage",
+            "Resource": {
+              "Fn::GetAtt": [
+                "TelemetryFailureQueue",
+                "Arn"
+              ]
+            },
+            "Condition": {
+              "ArnEquals": {
+                "aws:PrincipalArn": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${WorkloadAccountId}:role/${WorkloadStackName}-telemetry"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+]

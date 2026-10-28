@@ -1,0 +1,3 @@
+# Permission plan review
+
+The example is a non-executable starting subset, not a complete deployment authorization. Replace every uppercase placeholder and expand checks using each profile's expanded permissions and resource inventory. Include resource creation/update, tags, encryption, event sources, policies, role creation and exact PassRole targets. Review CloudFormation trust, permission boundaries, SCPs and resource policies separately. Never grant wildcard administrator access merely to pass simulation. Preflight is read-only; a passing subset does not prove deployment permission completeness.

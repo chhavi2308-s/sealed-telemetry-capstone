@@ -1,52 +1,50 @@
 # Operator runbook
 
-## Local reproduction
+See `release/DEPLOYMENT.md` for account gates, exact staging/change-set commands, inventory, cost assumptions, live acceptance, rollback and cleanup. Nothing in this runbook authorizes an AWS deployment.
 
-Use README commands in a fresh virtual environment. Test/demo output is synthetic. Do not reuse a demo directory. Normal, delayed-audit, duplicate, out-of-order and bulk scenarios should be consistent; replay-suppression suspicious with a separate inconclusive app-gap case; benign-log-failure inconclusive; bound-replay inconclusive because retries and copied metadata are ambiguous; tampering fails integrity. `response-failure` must remain unverified. Token expiry, wrong scope/audience and successful/failed revocation are covered by tests.
+## Local demonstrations
 
-## Deployment gate
+From a fresh environment follow README. Each output directory must be new. Run normal, replay-suppression and benign-log-failure through `sealed_telemetry.cli demo`; verify reports with `cli verify`. The replay omits invocation/action IDs. Provider audit remains present when app intent is suppressed. A benign missing app log is inconclusive. The local boundary is a software model, not an AWS security boundary.
 
-No live deploy has been tested or authorized. Need an isolated account ID, region, temporary deployment role/SSO profile, Owner, expiry date, approved spending cap, budget name with notifications, and approval for governance retention and retained resources. Account-wide API Gateway logging role must already exist; this project will not change it automatically. Install AWS CLI and SAM CLI separately. Never paste access keys into files or chat.
+## Approval and containment
 
-```text
-aws sso login --profile LAB
-aws sts get-caller-identity --profile LAB
-python scripts/preflight.py --account ACCOUNT --region REGION --budget-name NAME --max-budget-usd CAP --output preflight.json
-sam build --template-file infra/template.yaml
-sam validate --template-file infra/template.yaml --lint
-sam deploy --stack-name sealed-telemetry-lab --region REGION --capabilities CAPABILITY_IAM --resolve-s3 --no-execute-changeset --parameter-overrides Owner=OWNER ExpiresOn=YYYY-MM-DD LabExposureEnabled=false --tags Project=SealedTelemetry Environment=Lab Owner=OWNER ExpiresOn=YYYY-MM-DD
+The findings dispatcher deduplicates executions. The Standard workflow waits for an operator callback; an input approved=true never bypasses it. Configure OperatorPrincipalArn explicitly. Callback tokens remain encrypted and are never returned by the API. InvestigatorPrincipalArn may read cases/generate reports but cannot approve response.
+
+```powershell
+python scripts/operator_cli.py list --url OPERATOR_API_URL --region REGION
+python scripts/operator_cli.py show --approval-id ID --url OPERATOR_API_URL --region REGION
+python scripts/operator_cli.py approve --approval-id ID --response-action contain --disable-integration --url OPERATOR_API_URL --region REGION
 ```
 
-Set AWS_PROFILE and AWS_DEFAULT_REGION in the shell; preflight uses the SDK credential chain. Values above are operator-supplied, not defaults to copy verbatim. Build/validation is local. `sam deploy` stages resources and requires cloud-spending authorization even with no-execute-changeset. Review the generated change set, IAM resources, resource count, retained S3/KMS/DynamoDB resources and costs before separately authorizing execution. Governance retention defaults to one day; bucket, keys, evidence, decisions, responses and provider outbox are retained. Do not enable compliance mode without a new ADR and approval.
+The last command prints a concrete plan and hash. Review subject, case/revision, action and integration impact, then repeat with `--execute --approved-plan-hash HASH`. Reject uses the same flow with mode reject. Writes are bound to that exact plan. An approval applies only to the current decision and expires for starting an attempt after 15 minutes. Superseded decisions cannot authorize registry changes; the mutation checks the current revision atomically. Do not work around a stale decision error by changing a boolean or hash.
 
-`LabExposureEnabled=true` is only for the approved disposable Review-2 build. IAM callers invoke WorkloadUrl with SigV4 POST JSON. Body `{}` runs normal. Body `{"suppress_log":true,"expose_test_token":true}` returns the disposable test token only with exposure enabled. Use scripts/cloud_demo.py; it keeps the token in memory and writes sanitized observations. The mock SaaS uses HTTPS GET with Bearer auth and X-Run-Id; replay omits invocation/action headers.
+Inspect the actual workflow and response records. Revocation is probed before optional global integration disabling, so a global denial cannot masquerade as verified per-token revocation. Generic 403, expired/unknown tokens, lookup failures and network errors do not prove revocation. An already disabled integration can mask verification; preserve an unverified outcome and investigate rather than reopening it automatically. Response leases bound concurrent effects, with at most three completed attempts; started negative attempt keys preserve interruption evidence before side effects. No token enters workflow outputs or response audit records.
 
-## Live acceptance before declaring Review-2 complete
+A failed broker/workflow can be restarted manually under a new execution name with the current sanitized finding, after review; it requires a fresh approval. Repeated findings do not silently create duplicate executions. If callback acknowledgement is uncertain, the API checks execution history; it never assumes delivery. Approval status approved is not a containment-success claim. A decision that changes after an effect is preserved as a new revision; do not automatically undo a security action.
 
-Record stack ARN, account, region, commit, AWS request IDs and deployed resource list. Verify healthy Lambda and queue alarms. Use an investigator principal to query EvidenceTable RunIndex for the demo run and DecisionTable for its cases, retrieve archived objects by archive_version, and recompute canonical hashes. Wait for the asynchronous outbox and one-minute detector schedule; do not promise instant results. Confirm normal, suppressed replay and benign logging failure. Then use the actual app role to attempt archive put/delete, index changes and provider evidence forgery; expect denial. Moto and static checks do not establish these denials. Capture deployment screenshots and video only after this succeeds.
+## Recovery
 
-## Queue/outbox recovery
+Deploy/review known-good workload code first. Request a new workflow for the current case and approve response-action recover without disable-integration. Recovery requires the old credential to be revoked, issues a fresh disposable credential, records trusted recovery expectations, reopens the synthetic integration and verifies old rejection plus fresh success. Failure closes it again. Credentials remain internal. Recovery demonstrates credential/integration restoration for read-only synthetic records; arbitrary modified-data restoration is not claimed. Clean-code deployment requires separate change-set review and live verification.
 
-If queue age or DLQ alarm fires, inspect consumer error metrics and message IDs, never dump payloads into shared logs. Resolve IAM/schema/KMS faults first. Retry legitimate events with their original event IDs; changed payload under the same ID is rejected. S3-first persistence means an archive-only object after an index outage is repaired on redelivery. Start DLQ redrive only after explicit operator approval; do not purge. Provider stream exhaustion enters AuditFailureQueue with stream metadata; recover raw records from ProviderOutbox using event IDs and resend original body as the audit-forwarder role. Pending: a fully automated operator redrive command and rehearsed stream-expiry recovery.
+## Evidence, failed delivery and forensics
 
-## Containment and recovery
+Queue receipt means buffered, not archived. Check DLQ/oldest-message alarms, pending provider outbox and source health. Inspect IDs/error classes; do not dump original messages or tokens to shared logs. Invalid intake stores only rejection metadata/body-representation hashes. Poison-message quarantine is under the private archive quarantine/ prefix, with no raw producer payload; failed messages still follow DLQ handling. Never call metadata-only quarantine a full payload reconstruction.
 
-EventBridge starts a Step Functions workflow that ends at ApprovalRequired by default. This is alert-only, not containment success or a human callback UI. Operator reviews evidence, health, scope and uncertainty, then starts a new execution with the sanitized finding, decision_id and `approved:true`. No bearer token is placed in workflow input/history. Responder decrypts only the relevant lab token under a separate KMS key, marks the registry revoked, calls the real mock SaaS endpoint and requires 403 before reporting verified. A timeout is retryable; failed verification is never successful. Response evidence is collected independently. Cached response results are idempotent by decision_id; an unverified cached result requires investigation/new authorized action rather than silent success.
+For an approved SQS redrive:
 
-Recovery: redeploy a reviewed known-good commit, disable exposure, invoke gateway to issue a fresh token and verify a new synthetic read succeeds. Verify the revoked old credential still fails. Local tests cover rotation old/new behavior; cloud clean-deployment recovery remains unverified. Synthetic resources are read-only, so no fabricated restore is reported. An approved execution may include `disable_integration:true`; the responder disables the mock integration and still verifies HTTP rejection. Re-enabling is a separate explicit operator registry change after clean-code review, not an automatic response reversal.
+```powershell
+python -m sealed_telemetry.redrive --region REGION --source-url DLQ_URL --destination-url ORIGINAL_QUEUE_URL --plan redrive.json
+python -m sealed_telemetry.redrive --region REGION --plan redrive.json --approved-plan-hash REVIEWED_HASH
+```
 
-## Rollback and teardown
+Planning checks account/region and the configured DLQ relationship. Execution rechecks the same plan, refuses an active move and rate-limits native redrive. Enqueued is not archive-verified. Inspect move-task status, queue age, hashes and indexes afterward. Do not redrive stream failure metadata as canonical evidence. Invoke ReplayFunction first with selected original ProviderOutbox event_ids for a dry plan, then with its approved_plan_hash. It preserves event IDs/bodies and never removes original outbox records. For expired stream metadata use a scoped read-only outbox inspection to identify records; do not purge or invent replacement observations.
 
-Rollback application code with `sam build` from the previously reviewed commit and a reviewed change set. Do not roll back evidence tables or reuse another environment's HMAC key. Keep saved evidence version manifests. CloudFormation rollback and partial-failure recovery must be rehearsed after approval.
+Generate a version-pinned core report through operator_cli report or scripts/export_incident.py. If investigation spans attacker-assigned run IDs, use credential-fingerprint scope. Each archived version's original, canonical and normalized hashes are verified; timestamps do not prove causal order. Export detailed response attempts separately:
 
-Run `python scripts/cleanup.py --stack STACK --account ACCOUNT --region REGION --output cleanup-plan.json` for a read-only resource inventory. Deleting resources requires `--execute --approve-account ACCOUNT`; this command has NOT been run. It requests stack deletion but never deletes retained resources, bypasses retention, purges queues or schedules KMS deletion. Wait for stack completion and compare retained resources, staging buckets, logs, secrets recovery state and remaining charges. Only the owner can separately approve disposal of retained evidence/keys. Budget alerts do not cap AWS spend.
+```powershell
+python scripts/export_response.py --account ACCOUNT --region REGION --table RESPONSE_HISTORY_TABLE --approval-id APPROVAL_ID --output response-history.json
+```
 
-## Calibration, export and Windows build notes
+A started record without completion is an interrupted/unknown outcome. To repair lost final evidence delivery, an authorized security operator may invoke ResponderFunction with operation=reemit, approval_id and completed attempt (1..3). This reads retained evidence and enqueues the original event only; it does not repeat containment and explicitly does not verify current enforcement. Keep all failed/completed attempts and late/revised decisions in the incident bundle.
 
-Use `python scripts/calibrate.py --input benign-delays.json --output calibrated-policy.json`. Input is a map from source to independently measured non-negative delivery-delay samples in seconds. Review the emitted policy and supply its JSON through the ReconciliationPolicy SAM parameter; defaults are provisional.
-
-Use `python scripts/export_incident.py --run-id RUN --event-table TABLE --decision-table TABLE --archive-bucket BUCKET --region REGION --output incident.json` with investigator read permissions. Alternatively use `--credential-fingerprint HMAC` instead of run ID to reconstruct across provider-assigned research runs. Export requires DynamoDB index/history reads, S3 GetObjectVersion and evidence-key decrypt; no responder privilege is needed.
-
-On Windows, install SAM tooling and clone/build in a short directory. Long repository paths can exceed dependency extraction limits, especially with cached `.aws-sam/deps` paths. This session validated and built identical source from a short staging directory, with file hashes preserved. No system long-path setting was modified. Linux CI also validates/builds SAM without cloud credentials.
-
-Containment verification uses the credential's authorized operation: read tokens are probed at /records and export tokens at /export. A wrong-scope rejection cannot be used as proof of successful containment.
+Evidence exports may be cross-service snapshots rather than one atomic instant. APIs mark bounded/truncated results; use the paginated SDK exports for full scoped reconstruction. Health proves operational observations, not completeness. Neither healthy current components nor valid hashes establish that no historical evidence was lost. Record outages, retention gaps, unknown coverage and scale bounds in every report.

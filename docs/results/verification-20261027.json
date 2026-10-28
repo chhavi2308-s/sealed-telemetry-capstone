@@ -1,0 +1,23 @@
+{
+  "date": "2026-10-28",
+  "source_commit": "9e57d73",
+  "pytest": {
+    "passed": 107,
+    "seconds": 41.08
+  },
+  "ruff": "passed",
+  "format": "55 files formatted",
+  "mypy": "23 source files passed",
+  "cfn_lint": "four templates passed",
+  "sam_basic_validation": [
+    "template",
+    "security",
+    "workload"
+  ],
+  "aws_profiles": [],
+  "aws_credentials_available": false,
+  "aws_region": null,
+  "aws_deployed": false,
+  "interrupted_sam_build": "artifact exists; interrupted process exit unavailable, not newly certified",
+  "clean_install": "saved demo artifacts exist; original process exit unavailable"
+}
