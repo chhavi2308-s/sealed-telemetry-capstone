@@ -1,9 +1,9 @@
 # AWS teammate handover
 
-Use https://github.com/chhavi2308-s/sealed-telemetry-capstone branch implementation/engineering-foundation. Remote publication remains unverified until authentication succeeds. AWS is NOT DEPLOYED.
+Use https://github.com/chhavi2308-s/sealed-telemetry-capstone branch main (PR #1 merged at 6fe1015). AWS is NOT DEPLOYED.
 
 ```powershell
-git clone --branch implementation/engineering-foundation https://github.com/chhavi2308-s/sealed-telemetry-capstone.git
+git clone --branch main https://github.com/chhavi2308-s/sealed-telemetry-capstone.git
 cd sealed-telemetry-capstone
 python -m venv .venv
 .venv/Scripts/python -m pip install -r requirements-dev.lock
@@ -17,7 +17,7 @@ Use AWS CLI v2: aws configure sso --profile sealed-sandbox; aws sso login --prof
 
 Never execute deployment, change-set execution, fault injection, response actions, stack/key/evidence deletion without applicable explicit approval. Budget alerts are not spending caps. Retained evidence/keys/secret survive teardown and may charge indefinitely.
 
-107 tests passed; live IAM isolation, outages, recovery, performance, cost and cleanup remain unverified. Copied-identifier replay retains15 false negatives among60 synthetic replay trials. See KNOWN_ISSUES.md and TECHNICAL_REPORT.md.
+108 tests passed; live IAM isolation, outages, recovery, performance, cost and cleanup remain unverified. Copied-identifier replay retains15 false negatives among60 synthetic replay trials. See KNOWN_ISSUES.md and TECHNICAL_REPORT.md.
 
 ## Publish fallback from an authenticated machine
 

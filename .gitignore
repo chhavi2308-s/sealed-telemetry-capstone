@@ -16,3 +16,7 @@ dist/
 build/
 
 .clean-install/
+
+# Local downloaded CI diagnostics
+push-failure.log
+pr-failure.log
