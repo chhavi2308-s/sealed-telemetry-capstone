@@ -1,0 +1,11 @@
+# Post-merge compatibility review —29 October2026
+
+Based on origin/main6fe1015, maintenance/actions-compatibility. Original pins: checkout11d5960a326750d5838078e36cf38b85af677262(v4), setup-python a26af69be951a213d495a4c3e4e4022e16d87065(v5). Their Node20 warning is a runtime migration warning, not evidence of application failure.
+
+Official release tags resolved by git ls-remote: checkout v7.0.1 =3d3c42e5aac5ba805825da76410c181273ba90b1; setup-python v7.1.0 =6d4fd22b20465ccc0f7354476588e8df7c9ca0e0. Both official action.yml files declare node24. Full SHA pinning and contents:read permissions remain. Updated actions require a new hosted workflow run; local Python tests do not execute JavaScript actions.
+
+Sources: https://github.com/actions/checkout/releases/tag/v7.0.1 and https://github.com/actions/setup-python/releases/tag/v7.1.0 . Runner guidance: https://github.com/actions/runner-images . The latest label is a moving image, not an OS pin. The guidance snapshot lists Ubuntu24 as latest and Ubuntu26 as available while migration notices announce rollout. Do not infer the actual job OS from the label alone; inspect Set up job runner-image logs. No confirmed Ubuntu26-specific failure exists here. Keep latest; an explicit26 validation run is optional before claiming26 compatibility. Python3.12 is installed explicitly, SAM tooling remains isolated and pywin32 is Windows-marked.
+
+Local rerun:108 tests passed in43.95seconds; Ruff lint/format, strict mypy and infrastructure lint passed. Limited current tracked-file credential signatures found no matches; this is not exhaustive secret detection. Downloaded failure logs are untracked and now explicitly ignored. No AWS configuration/credentials were added.
+
+AWS preparation: main is the handover branch. Confirm target account(s)/region, temporary SSO role and exact CFN role, existing artifact bucket, regional services/quotas, budget notification recipients, owner/expiry tags and retention. Review the permission-plan example as a subset, not complete proof. Run read-only preflight, then present the exact change set/cost/retained-key implications for approval. Live isolation, delivery, response/recovery and timings remain unverified. No cloud deployment performed.
