@@ -1,0 +1,35 @@
+{
+  "account": "ACCOUNT",
+  "region": "REGION",
+  "cloudformation_service_role": "arn:aws:iam::ACCOUNT:role/APPROVED_CFN_ROLE",
+  "checks": [
+    {
+      "policy_source": "caller",
+      "ActionNames": [
+        "iam:PassRole"
+      ],
+      "ResourceArns": [
+        "arn:aws:iam::ACCOUNT:role/APPROVED_CFN_ROLE"
+      ]
+    },
+    {
+      "policy_source": "caller",
+      "ActionNames": [
+        "cloudformation:CreateChangeSet",
+        "cloudformation:DescribeChangeSet"
+      ],
+      "ResourceArns": [
+        "arn:aws:cloudformation:REGION:ACCOUNT:stack/STACK/*"
+      ]
+    },
+    {
+      "policy_source": "cloudformation",
+      "ActionNames": [
+        "lambda:CreateFunction"
+      ],
+      "ResourceArns": [
+        "arn:aws:lambda:REGION:ACCOUNT:function:STACK-*"
+      ]
+    }
+  ]
+}

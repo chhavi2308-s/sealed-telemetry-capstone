@@ -1,0 +1,47 @@
+{
+  "mode": "PLANNING_ONLY",
+  "observed_pricing_date": "2026-10-27",
+  "account": "UNCONFIRMED",
+  "deployment_region": "UNCONFIRMED",
+  "assumptions": {
+    "region_example": "us-east-1",
+    "days_running": 30,
+    "test_interactions": 1000,
+    "lambda_requests": 350600,
+    "lambda_gb_seconds": 86400.0,
+    "rest_requests": 176800,
+    "logs_ingested_gb": 1,
+    "kms_requests": 345600,
+    "secret_reads": 10000,
+    "other_services_allowance_usd": 10,
+    "allowance_scope": "Other services and staging; replace allowance with target-region quote"
+  },
+  "usd_components": {
+    "retained_kms_keys_full_month": 3.0,
+    "retained_secret_full_month": 0.4,
+    "alarms": 1.9,
+    "dashboard": 3.0,
+    "lambda_requests": 0.0701,
+    "lambda_compute": 1.44,
+    "api_gateway_rest": 0.6188,
+    "logs_ingestion": 0.5,
+    "kms_requests": 1.0368,
+    "secret_reads": 0.05,
+    "unpriced_other_services_allowance": 10
+  },
+  "usd_subtotal": 22.02,
+  "usd_with_30_percent_contingency": 28.62,
+  "free_tier_assumed": false,
+  "rate_sources": [
+    "https://aws.amazon.com/lambda/pricing/",
+    "https://aws.amazon.com/api-gateway/pricing/",
+    "https://aws.amazon.com/kms/pricing/",
+    "https://aws.amazon.com/cloudwatch/pricing/",
+    "https://aws.amazon.com/secrets-manager/pricing/"
+  ],
+  "limits": [
+    "Not a cap or quote; traffic, retries, region and existing trails change cost.",
+    "Review key rotations, retained growth, support, taxes and organization costs.",
+    "Retained keys/secret keep charging; allowance is not regional unit pricing."
+  ]
+}

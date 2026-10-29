@@ -1,0 +1,393 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sealed-telemetry:evidence:1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "run_id",
+    "scenario_id",
+    "source_id",
+    "event_type",
+    "event_time_utc",
+    "actor_pseudonym",
+    "credential_fingerprint",
+    "operation",
+    "resource_pseudonym"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1,
+      "format": "uuid"
+    },
+    "run_id": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1
+    },
+    "scenario_id": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1
+    },
+    "source_id": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1,
+      "enum": [
+        "app",
+        "gateway",
+        "provider",
+        "health",
+        "responder",
+        "platform",
+        "cloudtrail",
+        "approval",
+        "collector"
+      ]
+    },
+    "event_type": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1
+    },
+    "event_time_utc": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1,
+      "format": "date-time"
+    },
+    "actor_pseudonym": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1
+    },
+    "credential_fingerprint": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "operation": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1
+    },
+    "resource_pseudonym": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1
+    },
+    "outcome": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1,
+      "enum": [
+        "success",
+        "denied",
+        "failure"
+      ]
+    },
+    "invocation_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 256,
+      "minLength": 1
+    },
+    "action_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 256,
+      "minLength": 1
+    },
+    "provider_request_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 256,
+      "minLength": 1
+    },
+    "schema_version": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1,
+      "const": "1"
+    },
+    "health_for_source": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 256,
+      "minLength": 1
+    },
+    "source_health": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 256,
+      "minLength": 1
+    },
+    "trace_context": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "maxProperties": 16,
+      "propertyNames": {
+        "maxLength": 64
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 1024
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source_id": {
+            "const": "app"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "enum": [
+              "INTENT_CREATED"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source_id": {
+            "const": "gateway"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "enum": [
+              "EXPECTED_ACTION"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source_id": {
+            "const": "provider"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "enum": [
+              "PROVIDER_ACTION"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source_id": {
+            "const": "health"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "enum": [
+              "SOURCE_HEALTH"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source_id": {
+            "const": "responder"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "enum": [
+              "RESPONSE_ACTION",
+              "EXPECTED_ACTION",
+              "INTENT_CREATED"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source_id": {
+            "const": "platform"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "enum": [
+              "API_INGRESS",
+              "LAMBDA_PLATFORM"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "enum": [
+              "EXPECTED_ACTION",
+              "INTENT_CREATED"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "invocation_id",
+          "action_id"
+        ],
+        "properties": {
+          "invocation_id": {
+            "type": "string"
+          },
+          "action_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "enum": [
+              "PROVIDER_ACTION"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "provider_request_id"
+        ],
+        "properties": {
+          "provider_request_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "enum": [
+              "SOURCE_HEALTH"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "health_for_source",
+          "source_health"
+        ],
+        "properties": {
+          "health_for_source": {
+            "type": "string"
+          },
+          "source_health": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source_id": {
+            "const": "cloudtrail"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "enum": [
+              "AWS_API"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source_id": {
+            "const": "approval"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "enum": [
+              "APPROVAL_DECISION"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source_id": {
+            "const": "collector"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "event_type": {
+            "enum": [
+              "INGEST_REJECTED"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

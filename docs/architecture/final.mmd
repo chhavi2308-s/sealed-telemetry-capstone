@@ -1,0 +1,64 @@
+flowchart TB
+  classDef untrusted fill:#fff0e8,stroke:#b35419
+  classDef secured fill:#e8f3ff,stroke:#245c91
+  classDef gate fill:#fff7d6,stroke:#8e7300
+  note["Implementation candidate • 27 October 2026<br/>Not deployed; single-account lab or final two-account profile"]
+  Client[Legitimate synthetic client] --> GatewayAPI
+  Harness[Separate disposable-token replay harness] --> SaaSAPI
+  subgraph WORKLOAD["Compromisable workload account — final profile"]
+    App[Workload Lambda<br/>bounded IAM: own logs + intent intake]:::untrusted
+    AppLogs[CloudWatch app/platform logs<br/>corroborative, forgeable/suppressible]:::untrusted
+    WorkParser[Whitelisted metadata adapter]
+    WorkTrail[Selected account-native CloudTrail]
+    App --> AppLogs --> WorkParser
+  end
+  subgraph SECURITY["Independently controlled security account"]
+    GatewayAPI[IAM workload-entry API] --> Gateway[Trusted expected-action gateway]
+    Gateway --> Issuer[Scoped opaque-token issuer]
+    Issuer --> Registry[(Encrypted disposable-token registry)]
+    Gateway --> App
+    App --> SaaSAPI[Bearer-protected synthetic SaaS API]
+    SaaSAPI --> SaaS[Provider Lambda]
+    Registry --> SaaS
+    SaaS --> Outbox[(Durable provider-owned audit outbox)]
+    Outbox --> Forwarder[Stream forwarder + original-ID replay]
+    Forwarder --> ProviderQ[Independent provider queue + DLQ]
+    Gateway --> Intake[IAM source-bound intake]
+    App -->|untrusted intent| Intake
+    Health[Operational health monitor<br/>availability ≠ completeness] --> Intake
+    Intake --> MainQ[Evidence queue + DLQ]
+    SecLogs[Selected access/platform logs] --> Parser[Whitelisted metadata adapter]
+    Parser --> PlatformQ[Platform queue + DLQ]
+    WorkParser -->|narrow cross-account append| PlatformQ
+    SecTrail[Selected security-native CloudTrail] --> Native[(Retained versioned native-log bucket<br/>source trail/account restrictions)]
+    WorkTrail --> Native
+    Native --> TrailParser[Version-pinned CloudTrail metadata adapter]
+    TrailParser --> TrailQ[AWS API queue + DLQ]
+    ProviderQ & MainQ & PlatformQ & TrailQ --> Normalize[Source-bound normalizer<br/>idempotent archive-first persistence]
+    Normalize --> Archive[(Protected KMS/Object Lock evidence<br/>raw valid records + receipts<br/>metadata-only rejection quarantine)]
+    Normalize --> Index[(Evidence index / active cursors / health)]
+    Index --> Sweep[Bounded deadline sweeper / IBER]
+    Sweep --> Decisions[(Append-only decision revisions<br/>separate mutable current pointer)]
+    Decisions --> Bus[Findings bus]
+    Bus --> Dispatch[Deterministic execution deduplication]
+    Dispatch --> SFN[Standard response workflow]:::gate
+    SFN --> Broker[Encrypted callback-token broker]:::gate
+    Broker --> Approval[(Approval coordination + retained decisions)]
+    Operator[Authorized operator] --> OpsAPI[IAM operator API / CLI]:::gate
+    OpsAPI --> Approval
+    Approval -->|reviewed exact action callback| SFN
+    SFN --> Responder[Leased responder + durable attempt history]
+    Responder -->|current revision checked atomically| Registry
+    Responder -->|separate revocation / integration probes| SaaSAPI
+    Responder -->|approved recovery: old rejected, fresh succeeds| Issuer
+    Responder --> Intake
+    Investigator[Read-only investigator] --> Cases[Cases / private report API]
+    Decisions & Index & Archive --> Report[Exact-version forensic exporter]
+    Cases --> Report -->|private reports prefix| Archive
+    FailureQ[Restricted async-failure queues<br/>reviewed redrive / replay; never purge] --> Operator
+    Alarms[Queue/error/missing-sweep alarms + dashboard] --> Operator
+  end
+  note -.-> WORKLOAD
+  note -.-> SECURITY
+  GroundTruth[Separate ground truth / frozen research protocols] -.-> Evaluation[Baselines, ablations and analysis<br/>never detector input]
+  Decisions -.-> Evaluation

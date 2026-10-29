@@ -1,0 +1,5 @@
+{
+  "scanner": "limited high-confidence signatures; not exhaustive secret detection",
+  "blobs": 742,
+  "findings": []
+}

@@ -1,0 +1,357 @@
+{
+  "study_protocol_sha256": "9510b85f129308ba2f1b330dc7be74c8fef0d7fae70a29033c98df8065c37957",
+  "frozen_policy_sha256": "99124181e0088b738f3ede3cb7995dde1c5bc8b6f304879bedffcf8f112d7f98",
+  "scenario_sets_disjoint": true,
+  "calibration_runs": 40,
+  "test": {
+    "mode": "synthetic_parameter_holdout",
+    "protocol_hash": "ae11bdf72e7e4b0e8333a5732fe8bbbce465550d95b7f95bc3b855553cb6e08a",
+    "runs": 180,
+    "metrics": {
+      "app_only": {
+        "n": 180,
+        "tp": 0,
+        "fp": 0,
+        "fn": 60,
+        "tn": 120,
+        "precision": null,
+        "recall": 0.0,
+        "f1": 0.0,
+        "false_positive_rate": 0.0,
+        "inconclusive_rate": 0.16666666666666666,
+        "recall_wilson_95": [
+          0,
+          0.06017393047793289
+        ],
+        "fpr_wilson_95": [
+          0,
+          0.031020271055929513
+        ]
+      },
+      "audit_only": {
+        "n": 180,
+        "tp": 45,
+        "fp": 15,
+        "fn": 15,
+        "tn": 105,
+        "precision": 0.75,
+        "recall": 0.75,
+        "f1": 0.75,
+        "false_positive_rate": 0.125,
+        "inconclusive_rate": 0.16666666666666666,
+        "recall_wilson_95": [
+          0.6276768905451521,
+          0.8422361442158816
+        ],
+        "fpr_wilson_95": [
+          0.07723428880969682,
+          0.19603091448225032
+        ]
+      },
+      "fixed_missing": {
+        "n": 180,
+        "tp": 60,
+        "fp": 71,
+        "fn": 0,
+        "tn": 49,
+        "precision": 0.4580152671755725,
+        "recall": 1.0,
+        "f1": 0.6282722513089005,
+        "false_positive_rate": 0.5916666666666667,
+        "inconclusive_rate": 0.0,
+        "recall_wilson_95": [
+          0.9398260695220669,
+          0.9999999999999999
+        ],
+        "fpr_wilson_95": [
+          0.5022061864748179,
+          0.6754400971649285
+        ]
+      },
+      "iber": {
+        "n": 180,
+        "tp": 45,
+        "fp": 0,
+        "fn": 15,
+        "tn": 120,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.8571428571428571,
+        "false_positive_rate": 0.0,
+        "inconclusive_rate": 0.6666666666666666,
+        "recall_wilson_95": [
+          0.6276768905451521,
+          0.8422361442158816
+        ],
+        "fpr_wilson_95": [
+          0,
+          0.031020271055929513
+        ]
+      },
+      "without_binding": {
+        "n": 180,
+        "tp": 0,
+        "fp": 0,
+        "fn": 60,
+        "tn": 120,
+        "precision": null,
+        "recall": 0.0,
+        "f1": 0.0,
+        "false_positive_rate": 0.0,
+        "inconclusive_rate": 0.6666666666666666,
+        "recall_wilson_95": [
+          0,
+          0.06017393047793289
+        ],
+        "fpr_wilson_95": [
+          0,
+          0.031020271055929513
+        ]
+      },
+      "without_deadlines": {
+        "n": 180,
+        "tp": 45,
+        "fp": 8,
+        "fn": 15,
+        "tn": 112,
+        "precision": 0.8490566037735849,
+        "recall": 0.75,
+        "f1": 0.7964601769911505,
+        "false_positive_rate": 0.06666666666666667,
+        "inconclusive_rate": 0.5833333333333334,
+        "recall_wilson_95": [
+          0.6276768905451521,
+          0.8422361442158816
+        ],
+        "fpr_wilson_95": [
+          0.03416489747129058,
+          0.12605267077718166
+        ]
+      },
+      "without_integrity": {
+        "n": 180,
+        "tp": 45,
+        "fp": 0,
+        "fn": 15,
+        "tn": 120,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.8571428571428571,
+        "false_positive_rate": 0.0,
+        "inconclusive_rate": 0.5833333333333334,
+        "recall_wilson_95": [
+          0.6276768905451521,
+          0.8422361442158816
+        ],
+        "fpr_wilson_95": [
+          0,
+          0.031020271055929513
+        ]
+      },
+      "without_provider": {
+        "n": 180,
+        "tp": 0,
+        "fp": 0,
+        "fn": 60,
+        "tn": 120,
+        "precision": null,
+        "recall": 0.0,
+        "f1": 0.0,
+        "false_positive_rate": 0.0,
+        "inconclusive_rate": 1.0,
+        "recall_wilson_95": [
+          0,
+          0.06017393047793289
+        ],
+        "fpr_wilson_95": [
+          0,
+          0.031020271055929513
+        ]
+      }
+    },
+    "iber_virtual_detection_p50_seconds": 40,
+    "iber_virtual_detection_p95_seconds": 40,
+    "forensic_completeness": 0.8333333333333334,
+    "cloud_detection_latency": null,
+    "containment_latency": null,
+    "cloud_invocation_overhead": null,
+    "billed_aws_cost": null,
+    "limitations": "Post-development synthetic parameter holdout; not blind external validation. No tuning on test results. Virtual delivery/event times."
+  },
+  "fixed_policy_test": {
+    "mode": "synthetic_parameter_holdout",
+    "protocol_hash": "d65d8be4dc318d8b8560855e8c875b31da843d271a8bde8c10b9e0902f29059d",
+    "runs": 180,
+    "metrics": {
+      "app_only": {
+        "n": 180,
+        "tp": 0,
+        "fp": 0,
+        "fn": 60,
+        "tn": 120,
+        "precision": null,
+        "recall": 0.0,
+        "f1": 0.0,
+        "false_positive_rate": 0.0,
+        "inconclusive_rate": 0.16666666666666666,
+        "recall_wilson_95": [
+          0,
+          0.06017393047793289
+        ],
+        "fpr_wilson_95": [
+          0,
+          0.031020271055929513
+        ]
+      },
+      "audit_only": {
+        "n": 180,
+        "tp": 45,
+        "fp": 15,
+        "fn": 15,
+        "tn": 105,
+        "precision": 0.75,
+        "recall": 0.75,
+        "f1": 0.75,
+        "false_positive_rate": 0.125,
+        "inconclusive_rate": 0.16666666666666666,
+        "recall_wilson_95": [
+          0.6276768905451521,
+          0.8422361442158816
+        ],
+        "fpr_wilson_95": [
+          0.07723428880969682,
+          0.19603091448225032
+        ]
+      },
+      "fixed_missing": {
+        "n": 180,
+        "tp": 60,
+        "fp": 71,
+        "fn": 0,
+        "tn": 49,
+        "precision": 0.4580152671755725,
+        "recall": 1.0,
+        "f1": 0.6282722513089005,
+        "false_positive_rate": 0.5916666666666667,
+        "inconclusive_rate": 0.0,
+        "recall_wilson_95": [
+          0.9398260695220669,
+          0.9999999999999999
+        ],
+        "fpr_wilson_95": [
+          0.5022061864748179,
+          0.6754400971649285
+        ]
+      },
+      "iber": {
+        "n": 180,
+        "tp": 45,
+        "fp": 0,
+        "fn": 15,
+        "tn": 120,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.8571428571428571,
+        "false_positive_rate": 0.0,
+        "inconclusive_rate": 0.6666666666666666,
+        "recall_wilson_95": [
+          0.6276768905451521,
+          0.8422361442158816
+        ],
+        "fpr_wilson_95": [
+          0,
+          0.031020271055929513
+        ]
+      },
+      "without_binding": {
+        "n": 180,
+        "tp": 0,
+        "fp": 0,
+        "fn": 60,
+        "tn": 120,
+        "precision": null,
+        "recall": 0.0,
+        "f1": 0.0,
+        "false_positive_rate": 0.0,
+        "inconclusive_rate": 0.6666666666666666,
+        "recall_wilson_95": [
+          0,
+          0.06017393047793289
+        ],
+        "fpr_wilson_95": [
+          0,
+          0.031020271055929513
+        ]
+      },
+      "without_deadlines": {
+        "n": 180,
+        "tp": 45,
+        "fp": 8,
+        "fn": 15,
+        "tn": 112,
+        "precision": 0.8490566037735849,
+        "recall": 0.75,
+        "f1": 0.7964601769911505,
+        "false_positive_rate": 0.06666666666666667,
+        "inconclusive_rate": 0.5833333333333334,
+        "recall_wilson_95": [
+          0.6276768905451521,
+          0.8422361442158816
+        ],
+        "fpr_wilson_95": [
+          0.03416489747129058,
+          0.12605267077718166
+        ]
+      },
+      "without_integrity": {
+        "n": 180,
+        "tp": 45,
+        "fp": 0,
+        "fn": 15,
+        "tn": 120,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.8571428571428571,
+        "false_positive_rate": 0.0,
+        "inconclusive_rate": 0.5833333333333334,
+        "recall_wilson_95": [
+          0.6276768905451521,
+          0.8422361442158816
+        ],
+        "fpr_wilson_95": [
+          0,
+          0.031020271055929513
+        ]
+      },
+      "without_provider": {
+        "n": 180,
+        "tp": 0,
+        "fp": 0,
+        "fn": 60,
+        "tn": 120,
+        "precision": null,
+        "recall": 0.0,
+        "f1": 0.0,
+        "false_positive_rate": 0.0,
+        "inconclusive_rate": 1.0,
+        "recall_wilson_95": [
+          0,
+          0.06017393047793289
+        ],
+        "fpr_wilson_95": [
+          0,
+          0.031020271055929513
+        ]
+      }
+    },
+    "iber_virtual_detection_p50_seconds": 45,
+    "iber_virtual_detection_p95_seconds": 45,
+    "forensic_completeness": 0.8333333333333334,
+    "cloud_detection_latency": null,
+    "containment_latency": null,
+    "cloud_invocation_overhead": null,
+    "billed_aws_cost": null,
+    "limitations": "Post-development synthetic parameter holdout; not blind external validation. No tuning on test results. Virtual delivery/event times."
+  },
+  "limitations": "Virtual scenario holdout; not blind validation or AWS calibration"
+}

@@ -1,0 +1,326 @@
+[
+  {
+    "logical_id": "AppLogPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "OwnFunctionLogsOnly",
+      "Roles": [
+        {
+          "Ref": "AppRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "AppLogs",
+                "Arn"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "AppPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "LabResourceAccess",
+      "Roles": [
+        {
+          "Ref": "AppRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "execute-api:Invoke"
+            ],
+            "Resource": {
+              "Ref": "IntakeArn"
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "AppRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ],
+      "PermissionsBoundary": {
+        "Ref": "WorkloadBoundary"
+      },
+      "RoleName": {
+        "Fn::Sub": "${AWS::StackName}-app"
+      }
+    }
+  },
+  {
+    "logical_id": "GatewayInvokePermission",
+    "Type": "AWS::Lambda::Permission",
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Ref": "AppFunction"
+      },
+      "Principal": {
+        "Fn::Sub": "arn:${AWS::Partition}:iam::${SecurityAccountId}:role/${SecurityStackName}-gateway"
+      }
+    }
+  },
+  {
+    "logical_id": "ObservationRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "RoleName": {
+        "Fn::Sub": "${AWS::StackName}-observation"
+      },
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": "sts:AssumeRole",
+            "Principal": {
+              "AWS": {
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${SecurityAccountId}:root"
+              }
+            },
+            "Condition": {
+              "ArnEquals": {
+                "aws:PrincipalArn": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${SecurityAccountId}:role/${SecurityStackName}-health"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Policies": [
+        {
+          "PolicyName": "ReadWorkloadAvailability",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "lambda:GetFunctionConfiguration"
+                ],
+                "Resource": {
+                  "Fn::GetAtt": [
+                    "AppFunction",
+                    "Arn"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "logical_id": "PlatformIngestPolicy",
+    "Type": "AWS::IAM::Policy",
+    "Properties": {
+      "PolicyName": "ScopedServiceAccess",
+      "Roles": [
+        {
+          "Ref": "PlatformIngestRole"
+        }
+      ],
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sqs:SendMessage"
+            ],
+            "Resource": {
+              "Ref": "PlatformQueueArn"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::GetAtt": [
+                "PlatformIngestLogs",
+                "Arn"
+              ]
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "sqs:SendMessage"
+            ],
+            "Resource": {
+              "Ref": "TelemetryFailureQueueArn"
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "PlatformIngestRole",
+    "Type": "AWS::IAM::Role",
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "SealedTelemetry"
+        },
+        {
+          "Key": "Environment",
+          "Value": "Lab"
+        },
+        {
+          "Key": "Owner",
+          "Value": {
+            "Ref": "Owner"
+          }
+        },
+        {
+          "Key": "ExpiresOn",
+          "Value": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      ],
+      "RoleName": {
+        "Fn::Sub": "${AWS::StackName}-telemetry"
+      }
+    }
+  },
+  {
+    "logical_id": "PlatformPermissionAppLogs",
+    "Type": "AWS::Lambda::Permission",
+    "Condition": "SupplementaryEnabled",
+    "Properties": {
+      "FunctionName": {
+        "Ref": "PlatformIngestFunction"
+      },
+      "Action": "lambda:InvokeFunction",
+      "Principal": {
+        "Fn::Sub": "logs.${AWS::Region}.amazonaws.com"
+      },
+      "SourceAccount": {
+        "Ref": "AWS::AccountId"
+      },
+      "SourceArn": {
+        "Fn::GetAtt": [
+          "AppLogs",
+          "Arn"
+        ]
+      }
+    }
+  },
+  {
+    "logical_id": "WorkloadBoundary",
+    "Type": "AWS::IAM::ManagedPolicy",
+    "Properties": {
+      "Description": "Maximum workload permissions: own logs and source-bound intent intake only",
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "logs:CreateLogStream",
+              "logs:PutLogEvents"
+            ],
+            "Resource": {
+              "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-app:*"
+            }
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "execute-api:Invoke"
+            ],
+            "Resource": {
+              "Ref": "IntakeArn"
+            }
+          },
+          {
+            "Effect": "Deny",
+            "Action": [
+              "s3:*",
+              "dynamodb:*",
+              "kms:*",
+              "iam:*",
+              "sts:AssumeRole",
+              "sqs:*"
+            ],
+            "Resource": "*"
+          }
+        ]
+      }
+    }
+  }
+]

@@ -1,0 +1,27 @@
+{
+  "source_commit": "3d15973db912d5b4701fefa54a15caf48870ea21",
+  "mode": "local_smoke",
+  "seed": 2026,
+  "trials_per_scenario": 2,
+  "source_hashes": {
+    "src\\sealed_telemetry\\aws_handlers.py": "bbf7890ed96447b2fee1a9e5cb52636d91e6fb5a55045363d3b8bfcdcd19accd",
+    "src\\sealed_telemetry\\aws_support.py": "ad8001af49942798c6c9b6b3741c5aa6456acef72654733b5c99acfab4713a66",
+    "src\\sealed_telemetry\\cli.py": "a2791f124bf24452380dd0df49f9d273a14797156ff1afb23fc01904b3d26db7",
+    "src\\sealed_telemetry\\cloud_detector.py": "3241c1748e76db3fa4206f52aa7a6218c1072e87f1ac502b6a85b06c90d6b720",
+    "src\\sealed_telemetry\\cloud_health.py": "a8edf3809b4dc1808f304baff36957f8d2ec0e067294ff2a666f6bf8bc80097c",
+    "src\\sealed_telemetry\\cloud_lab.py": "9506c1c6d72e610011b9cd453a7d61efb7ef42e74263f9e7a2264bd4d29379a1",
+    "src\\sealed_telemetry\\cloud_response.py": "cd994b809328b95f0d4e6ed0b61d3c7c840e3599907f4a4565400b1d3d2cc195",
+    "src\\sealed_telemetry\\evaluation.py": "09eb4132f26bbc5f82f6c924d9f47bebbb2d226dc97c15cd20e40acbaa02c72f",
+    "src\\sealed_telemetry\\lab.py": "8c4de825cfa82172de1794003cd90365225e32a2835e098db1771afc8cf718e9",
+    "src\\sealed_telemetry\\measurements.py": "f87902a0632bf4576f303ff4e97b9ae62ef44ad882259bd9ea271fb97a647ec2",
+    "src\\sealed_telemetry\\provider.py": "c6d7f20382fd4c1926bab905c995dc0fa8df92bae89c96d6b6fa85fc4a4e4ee7",
+    "src\\sealed_telemetry\\reconciliation.py": "22e69da35bbbf54c345b80ad11b718c359af926ad01becd8c53e08d0b9b85969",
+    "src\\sealed_telemetry\\reporting.py": "c652472b56ff6c90b31cf83833aa2b8e59314fa19a7d0fdd7134ccaa29d318b7",
+    "src\\sealed_telemetry\\response.py": "72a7911ad5ff451b38e5098924c50062fc13d6dc751e09fdefad7c79a28684e1",
+    "src\\sealed_telemetry\\schema.py": "c1868e83489d5c0543d7a2e39fc6781cc00e7755a8bcad361d7f95322a5fa741",
+    "src\\sealed_telemetry\\storage.py": "29ca5023eaea1f645880620c5a0b4ed7d4089f268ea172e8e1ff4b73eb3c3f97",
+    "src\\sealed_telemetry\\__init__.py": "752ffd4fc149a129d14867c014b52cc26db4481e936a99bc9897de7b56a7832f"
+  },
+  "virtual_event_time": true,
+  "aws_measurements": false
+}
