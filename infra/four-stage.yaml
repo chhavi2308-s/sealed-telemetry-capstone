@@ -1,0 +1,671 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Transform": "AWS::Serverless-2016-10-31",
+  "Description": "Only four-stage synthetic invoice upload. No IBER, reconciliation or response.",
+  "Parameters": {
+    "Owner": {
+      "Type": "String",
+      "MinLength": 1
+    },
+    "ExpiresOn": {
+      "Type": "String",
+      "AllowedPattern": "[0-9]{4}-[0-9]{2}-[0-9]{2}"
+    }
+  },
+  "Globals": {
+    "Function": {
+      "Runtime": "python3.12",
+      "Architectures": [
+        "x86_64"
+      ],
+      "MemorySize": 128,
+      "Timeout": 25,
+      "CodeUri": "../src",
+      "Tags": {
+        "Project": "SealedTelemetryFourStage",
+        "Owner": {
+          "Ref": "Owner"
+        },
+        "ExpiresOn": {
+          "Ref": "ExpiresOn"
+        }
+      }
+    }
+  },
+  "Resources": {
+    "UploadApi": {
+      "Type": "AWS::Serverless::HttpApi",
+      "Properties": {
+        "StageName": "demo",
+        "Auth": {
+          "EnableIamAuthorizer": true,
+          "DefaultAuthorizer": "AWS_IAM"
+        },
+        "DefaultRouteSettings": {
+          "ThrottlingBurstLimit": 2,
+          "ThrottlingRateLimit": 1
+        },
+        "Tags": {
+          "Project": "SealedTelemetryFourStage",
+          "Owner": {
+            "Ref": "Owner"
+          },
+          "ExpiresOn": {
+            "Ref": "ExpiresOn"
+          }
+        }
+      }
+    },
+    "ExpectedActions": {
+      "Type": "AWS::DynamoDB::Table",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "action_id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "action_id",
+            "KeyType": "HASH"
+          }
+        ],
+        "SSESpecification": {
+          "SSEEnabled": false
+        },
+        "TimeToLiveSpecification": {
+          "AttributeName": "expires_at",
+          "Enabled": true
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetryFourStage"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
+      }
+    },
+    "OAuthTokens": {
+      "Type": "AWS::DynamoDB::Table",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "token_hash",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "token_hash",
+            "KeyType": "HASH"
+          }
+        ],
+        "SSESpecification": {
+          "SSEEnabled": false
+        },
+        "TimeToLiveSpecification": {
+          "AttributeName": "expires_at",
+          "Enabled": true
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetryFourStage"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
+      }
+    },
+    "SaasAudit": {
+      "Type": "AWS::DynamoDB::Table",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BillingMode": "PAY_PER_REQUEST",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "provider_request_id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "provider_request_id",
+            "KeyType": "HASH"
+          }
+        ],
+        "SSESpecification": {
+          "SSEEnabled": false
+        },
+        "TimeToLiveSpecification": {
+          "AttributeName": "expires_at",
+          "Enabled": true
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "SealedTelemetryFourStage"
+          },
+          {
+            "Key": "Owner",
+            "Value": {
+              "Ref": "Owner"
+            }
+          },
+          {
+            "Key": "ExpiresOn",
+            "Value": {
+              "Ref": "ExpiresOn"
+            }
+          }
+        ]
+      }
+    },
+    "AuthorizationLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${AWS::StackName}-authorization"
+        },
+        "RetentionInDays": 7
+      }
+    },
+    "AuthorizationRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "FourStageOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:PutItem"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ExpectedActions",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "lambda:InvokeFunction"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ApplicationFunction",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-authorization:*"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "PermissionsBoundary": {
+          "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/st-four-stage-authorization-boundary"
+        }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Runtime-specific ceiling held outside this stack; preserve on rollback/teardown.",
+          "must": [
+            "Use exact externally reviewed boundary; never remove or replace it in this stack.",
+            "Retained role cleanup requires separate owner approval."
+          ]
+        }
+      }
+    },
+    "AuthorizationFunction": {
+      "Type": "AWS::Serverless::Function",
+      "DependsOn": "AuthorizationLogs",
+      "Properties": {
+        "Handler": "sealed_telemetry.four_stage.authorization",
+        "FunctionName": {
+          "Fn::Sub": "${AWS::StackName}-authorization"
+        },
+        "Role": {
+          "Fn::GetAtt": [
+            "AuthorizationRole",
+            "Arn"
+          ]
+        },
+        "Environment": {
+          "Variables": {
+            "EXPECTED_TABLE": {
+              "Ref": "ExpectedActions"
+            },
+            "APP_FUNCTION": {
+              "Ref": "ApplicationFunction"
+            }
+          }
+        },
+        "Events": {
+          "Upload": {
+            "Type": "HttpApi",
+            "Properties": {
+              "ApiId": {
+                "Ref": "UploadApi"
+              },
+              "Path": "/upload",
+              "Method": "POST",
+              "PayloadFormatVersion": "2.0"
+            }
+          }
+        }
+      }
+    },
+    "ApplicationLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${AWS::StackName}-application"
+        },
+        "RetentionInDays": 7
+      }
+    },
+    "ApplicationRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "FourStageOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "lambda:InvokeFunction"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::GetAtt": [
+                        "IssuerFunction",
+                        "Arn"
+                      ]
+                    },
+                    {
+                      "Fn::GetAtt": [
+                        "SaasFunction",
+                        "Arn"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-application:*"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "PermissionsBoundary": {
+          "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/st-four-stage-application-boundary"
+        }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Runtime-specific ceiling held outside this stack; preserve on rollback/teardown.",
+          "must": [
+            "Use exact externally reviewed boundary; never remove or replace it in this stack.",
+            "Retained role cleanup requires separate owner approval."
+          ]
+        }
+      }
+    },
+    "ApplicationFunction": {
+      "Type": "AWS::Serverless::Function",
+      "DependsOn": "ApplicationLogs",
+      "Properties": {
+        "Handler": "sealed_telemetry.four_stage.app",
+        "FunctionName": {
+          "Fn::Sub": "${AWS::StackName}-application"
+        },
+        "Role": {
+          "Fn::GetAtt": [
+            "ApplicationRole",
+            "Arn"
+          ]
+        },
+        "Environment": {
+          "Variables": {
+            "ISSUER_FUNCTION": {
+              "Ref": "IssuerFunction"
+            },
+            "SAAS_FUNCTION": {
+              "Ref": "SaasFunction"
+            }
+          }
+        }
+      }
+    },
+    "IssuerLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${AWS::StackName}-issuer"
+        },
+        "RetentionInDays": 7
+      }
+    },
+    "IssuerRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "FourStageOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:GetItem"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ExpectedActions",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:PutItem"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "OAuthTokens",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-issuer:*"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "PermissionsBoundary": {
+          "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/st-four-stage-issuer-boundary"
+        }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Runtime-specific ceiling held outside this stack; preserve on rollback/teardown.",
+          "must": [
+            "Use exact externally reviewed boundary; never remove or replace it in this stack.",
+            "Retained role cleanup requires separate owner approval."
+          ]
+        }
+      }
+    },
+    "IssuerFunction": {
+      "Type": "AWS::Serverless::Function",
+      "DependsOn": "IssuerLogs",
+      "Properties": {
+        "Handler": "sealed_telemetry.four_stage.issuer",
+        "FunctionName": {
+          "Fn::Sub": "${AWS::StackName}-issuer"
+        },
+        "Role": {
+          "Fn::GetAtt": [
+            "IssuerRole",
+            "Arn"
+          ]
+        },
+        "Environment": {
+          "Variables": {
+            "EXPECTED_TABLE": {
+              "Ref": "ExpectedActions"
+            },
+            "TOKEN_TABLE": {
+              "Ref": "OAuthTokens"
+            }
+          }
+        }
+      }
+    },
+    "SaasLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${AWS::StackName}-saas"
+        },
+        "RetentionInDays": 7
+      }
+    },
+    "SaasRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "FourStageOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:GetItem"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "OAuthTokens",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:PutItem"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "SaasAudit",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-saas:*"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "PermissionsBoundary": {
+          "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/st-four-stage-saas-boundary"
+        }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Runtime-specific ceiling held outside this stack; preserve on rollback/teardown.",
+          "must": [
+            "Use exact externally reviewed boundary; never remove or replace it in this stack.",
+            "Retained role cleanup requires separate owner approval."
+          ]
+        }
+      }
+    },
+    "SaasFunction": {
+      "Type": "AWS::Serverless::Function",
+      "DependsOn": "SaasLogs",
+      "Properties": {
+        "Handler": "sealed_telemetry.four_stage.saas",
+        "FunctionName": {
+          "Fn::Sub": "${AWS::StackName}-saas"
+        },
+        "Role": {
+          "Fn::GetAtt": [
+            "SaasRole",
+            "Arn"
+          ]
+        },
+        "Environment": {
+          "Variables": {
+            "TOKEN_TABLE": {
+              "Ref": "OAuthTokens"
+            },
+            "AUDIT_TABLE": {
+              "Ref": "SaasAudit"
+            }
+          }
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "UploadUrl": {
+      "Value": {
+        "Fn::Sub": "https://${UploadApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/demo/upload"
+      }
+    },
+    "InvokeArn": {
+      "Value": {
+        "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${UploadApi}/demo/POST/upload"
+      }
+    },
+    "ExpectedTable": {
+      "Value": {
+        "Ref": "ExpectedActions"
+      }
+    },
+    "AuditTable": {
+      "Value": {
+        "Ref": "SaasAudit"
+      }
+    }
+  },
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@3"
+    }
+  }
+}
