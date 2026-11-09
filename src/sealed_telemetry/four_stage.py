@@ -39,7 +39,8 @@ def call(function: str, payload: dict[str, Any]) -> dict[str, Any]:
     )
     if result.get("FunctionError"):
         raise RuntimeError("internal demo service failed")
-    return json.loads(result["Payload"].read())
+    response_payload: dict[str, Any] = json.loads(result["Payload"].read())
+    return response_payload
 
 
 def authorization(event: dict[str, Any], context: Any) -> dict[str, Any]:

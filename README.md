@@ -30,6 +30,8 @@ On Linux/macOS substitute `.venv/bin/python`. Demo directories must be new; exis
 - `docs/adr/`: specification conflicts, trust assumptions and accepted local design choices.
 - `docs/runbook.md`: cloud deployment, rollback, redrive, incident response and teardown.
 - `docs/REQUIREMENTS_TRACEABILITY.md`: requirement/ticket mapping, including unfinished requirements.
+- `docs/FOUR_STAGE_EVIDENCE_CONTRACT.md`: offline four-stage normalization, provenance rules,
+  and the missing credential-binding evidence that currently blocks full IBER conversion.
 
 ## Trust and limits
 

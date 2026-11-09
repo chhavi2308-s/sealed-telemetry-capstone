@@ -8,16 +8,16 @@ from typing import Any
 
 
 def analyze(
-    expected: list[dict],
-    intents: list[dict],
-    audits: list[dict],
+    expected: list[dict[str, Any]],
+    intents: list[dict[str, Any]],
+    audits: list[dict[str, Any]],
     *,
     now: int,
     complete: bool = False,
     settle_seconds: int = 5,
 ) -> list[dict[str, Any]]:
     results = []
-    by_id: dict[str, list[dict]] = {}
+    by_id: dict[str, list[dict[str, Any]]] = {}
     for row in audits:
         by_id.setdefault(row["provider_request_id"], []).append(row)
     unique = [rows[0] for rows in by_id.values()]
