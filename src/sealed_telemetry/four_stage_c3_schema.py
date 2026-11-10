@@ -336,10 +336,34 @@ def _provider(raw: dict[str, Any], native_id: str) -> str:
 
 
 def normalize(
-    source: str, contract: str, resource_arn: str, native_id: str, payload: dict[str, Any]
+    source: str,
+    contract: str,
+    resource_arn: str,
+    native_id: str,
+    payload: dict[str, Any],
+    archive_roles: tuple[tuple[str, str], ...] = (),
 ) -> dict[str, Any] | None:
     """Called only after read-through authentication. No receipt fields come from payload."""
     try:
+        if contract == "aws-events-1":
+            from sealed_telemetry.four_stage_archive import events_v1
+
+            require(source == "archive" and len(canonical(plain(payload))) <= 65536)
+            event = events_v1(payload, native_id, dict(archive_roles))
+            result = normalize(event["source_id"], "iber-1", resource_arn, event["event_id"], event)
+            require(result is not None)
+            assert result is not None
+            return {
+                **result,
+                "contract": contract,
+                "data": plain(payload),
+                "canonical_evidence": event,
+                "normalization_version": "aws-events-table-1",
+            }
+        if contract == "c4":
+            from sealed_telemetry.four_stage_c4_schema import normalize as normalize_c4
+
+            return normalize_c4(source, resource_arn, native_id, payload)
         raw = plain(payload)
         require(isinstance(raw, dict) and len(canonical(raw)) <= 16384)
         if contract == "c2":

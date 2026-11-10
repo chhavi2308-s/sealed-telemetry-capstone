@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -35,6 +36,8 @@ class Configuration:
     sources: tuple[Source, ...]
     max_records: int = 1000
     max_pages: int = 20
+    health_functions: tuple[tuple[str, str], ...] = ()
+    archive_roles: tuple[tuple[str, str], ...] = ()
 
     def validate(self) -> None:
         if (
@@ -67,10 +70,28 @@ class Configuration:
                 "issuer": "issuance_id",
                 "provider": "provider_request_id",
             }
-            valid = (source.contract == "c2" and expected.get(source.source_id) == source.key) or (
-                source.contract == "iber-1"
-                and source.source_id in {"gateway", "app", "provider", "health"}
-                and source.key == "event_id"
+            valid = (
+                (source.contract == "c2" and expected.get(source.source_id) == source.key)
+                or (
+                    source.contract == "iber-1"
+                    and source.source_id in {"gateway", "app", "provider", "health"}
+                    and source.key == "event_id"
+                )
+                or (
+                    source.contract == "c4"
+                    and {
+                        "gateway": "record_id",
+                        "app": "record_id",
+                        "provider": "provider_request_id",
+                        "health": "event_id",
+                    }.get(source.source_id)
+                    == source.key
+                )
+                or (
+                    source.contract == "aws-events-1"
+                    and source.source_id == "archive"
+                    and source.key == "event_id"
+                )
             )
             identity = (source.source_id, source.contract)
             if (
@@ -87,10 +108,56 @@ class Configuration:
         for contract, roles in (
             ("c2", {"gateway", "issuer", "provider"}),
             ("iber-1", {"gateway", "app", "provider", "health"}),
+            ("c4", {"gateway", "app", "provider", "health"}),
         ):
             configured = {s.source_id for s in self.sources if s.contract == contract}
             if configured and configured != roles:
                 raise CollectionError("INCOMPLETE_SOURCE_CONFIGURATION")
+        if any(s.contract == "c4" for s in self.sources):
+            from sealed_telemetry.four_stage_c4_schema import FUNCTION_PATTERN
+
+            try:
+                functions = dict(self.health_functions)
+                if (
+                    len(functions) != 4
+                    or len(self.health_functions) != 4
+                    or set(functions) != {"gateway", "app", "provider", "collector"}
+                    or len(set(functions.values())) != 4
+                    or not all(
+                        re.fullmatch(FUNCTION_PATTERN, arn)
+                        and arn.split(":")[1] == state[1]
+                        and arn.split(":")[3:5] == [state[2], state[3]]
+                        for arn in functions.values()
+                    )
+                    or not any(s.contract == "c2" for s in self.sources)
+                    or any(s.contract == "iber-1" for s in self.sources)
+                ):
+                    raise ValueError("invalid C4 configuration")
+            except (TypeError, ValueError):
+                raise CollectionError("INVALID_C4_CONFIGURATION") from None
+        elif self.health_functions:
+            raise CollectionError("INVALID_C4_CONFIGURATION")
+        if any(s.contract == "aws-events-1" for s in self.sources):
+            try:
+                roles_map = dict(self.archive_roles)
+                if (
+                    len(self.sources) != 1
+                    or len(self.archive_roles) != 4
+                    or set(roles_map) != {"gateway", "app", "provider", "health"}
+                    or len(set(roles_map.values())) != 4
+                    or not all(
+                        isinstance(arn, str)
+                        and ROLE_ARN.fullmatch(arn)
+                        and arn.split(":")[1] == state[1]
+                        and arn.split(":")[4] == state[3]
+                        for arn in roles_map.values()
+                    )
+                ):
+                    raise ValueError("ambiguous archive mapping")
+            except (TypeError, ValueError):
+                raise CollectionError("INVALID_ARCHIVE_CONFIGURATION") from None
+        elif self.archive_roles:
+            raise CollectionError("INVALID_ARCHIVE_CONFIGURATION")
 
     @property
     def policy_hash(self) -> str:
@@ -299,6 +366,7 @@ class Ledger:
                         configured.table_arn,
                         receipt["native_id"],
                         envelope["normalized"]["data"],
+                        self.config.archive_roles,
                     )
                     if reproduced != envelope["normalized"]:
                         raise CollectionError("STATE_INTEGRITY_FAILURE")
@@ -412,6 +480,10 @@ class Collector:
             or configured_role["RoleId"] != identity["UserId"].split(":", 1)[0]
         ):
             raise CollectionError("COLLECTOR_IDENTITY_REJECTED")
+        iam = self.session.client("iam", config=SDK_CONFIG)
+        for _, arn in self.config.archive_roles:
+            if iam.get_role(RoleName=arn.rsplit("/", 1)[1])["Role"]["Arn"] != arn:
+                raise CollectionError("ARCHIVE_SOURCE_ROLE_REJECTED")
         for arn, key in [(s.table_arn, s.key) for s in self.config.sources] + [
             (self.config.state_table_arn, "record_id")
         ]:
@@ -459,6 +531,7 @@ class Collector:
                                     source.table_arn,
                                     native_id,
                                     item,
+                                    self.config.archive_roles,
                                 )
                                 result = ledger.remember(source, native_id, normalized, observed)
                             except InvalidRecord:

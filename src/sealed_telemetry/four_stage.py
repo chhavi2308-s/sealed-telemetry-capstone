@@ -74,8 +74,10 @@ def authorization(event: dict[str, Any], context: Any) -> dict[str, Any]:
         from sealed_telemetry.four_stage_binding import EvidenceError, prepare_authorization
 
         try:
+            from sealed_telemetry.four_stage_context import enabled
+
             expected = prepare_authorization(
-                action, principal, getattr(context, "aws_request_id", None)
+                action, principal, None if enabled() else getattr(context, "aws_request_id", None)
             )
         except EvidenceError:
             return response(503, {"error": "evidence_configuration_unavailable"})
@@ -83,7 +85,9 @@ def authorization(event: dict[str, Any], context: Any) -> dict[str, Any]:
         Item=expected,
         ConditionExpression="attribute_not_exists(action_id)",
     )
-    result = call("APP_FUNCTION", action)
+    from sealed_telemetry.four_stage_context import dispatch, enabled
+
+    result = dispatch(event, context, expected) if enabled() else call("APP_FUNCTION", action)
     if result.get("status") != "success":
         return response(502, {"action_id": action["action_id"], "error": "operation_failed"})
     return response(
@@ -112,6 +116,10 @@ def emit_intent(event: dict[str, Any], context: Any) -> None:
 
 
 def app(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    from sealed_telemetry.four_stage_context import application, enabled
+
+    if enabled():
+        return application(event, context)
     evidence_v2 = c2_enabled()
     # Only an explicitly enabled lab invocation may omit the application intent.
     # The public authorization request schema still rejects simulation fields.
@@ -169,6 +177,10 @@ def issuer(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
 
 def saas(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    from sealed_telemetry.four_stage_context import enabled, observe_provider
+
+    if enabled():
+        return observe_provider(event, context)
     if c2_enabled():
         from sealed_telemetry.four_stage_binding import provider
 

@@ -31,6 +31,10 @@ def prepare(
     A scan and source availability are not global completeness attestations. Results
     always describe only this observed ledger view, with immutable prior assessments.
     """
+    if any(source.contract == "c4" for source in config.sources):
+        from sealed_telemetry.four_stage_c4_iber import prepare as prepare_c4
+
+        return prepare_c4(config, control, rows, now)
     blockers: set[str] = set()
     markers = json.loads(control["collections"])
     for source in config.sources:
@@ -85,8 +89,11 @@ def prepare(
     observations: dict[str, list[dict[str, Any]]] = {source: [] for source in health}
     for row, env in accepted:
         record = env["normalized"]
-        data, kind = record["data"], record["kind"]
+        data, kind = record.get("canonical_evidence", record["data"]), record["kind"]
         if kind == "health":
+            if record["contract"] == "aws-events-1":
+                blockers.add("ARCHIVE_HEALTH_OBSERVATION_BASIS_UNKNOWN")
+                continue
             observations[data["health_for_source"]].append(data)
             continue
         if kind == "canonical":
