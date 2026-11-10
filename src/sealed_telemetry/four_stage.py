@@ -29,6 +29,13 @@ LOG = logging.getLogger(__name__)
 LOG.setLevel(logging.INFO)
 
 
+def c2_enabled() -> bool:
+    mode = os.environ.get("FOUR_STAGE_EVIDENCE_MODE", "legacy")
+    if mode not in {"legacy", "c2"}:
+        raise ValueError("unsupported four-stage evidence mode")
+    return mode == "c2"
+
+
 def table(variable: str) -> Any:
     return boto3.resource("dynamodb", config=SDK_CONFIG).Table(os.environ[variable])
 
@@ -62,8 +69,18 @@ def authorization(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "authorized_at": now,
         "authorization_expires_at": now + 300,
     }
+    expected = {**action, "event_type": "EXPECTED_ACTION", "expires_at": now + 86400}
+    if c2_enabled():
+        from sealed_telemetry.four_stage_binding import EvidenceError, prepare_authorization
+
+        try:
+            expected = prepare_authorization(
+                action, principal, getattr(context, "aws_request_id", None)
+            )
+        except EvidenceError:
+            return response(503, {"error": "evidence_configuration_unavailable"})
     table("EXPECTED_TABLE").put_item(
-        Item={**action, "event_type": "EXPECTED_ACTION", "expires_at": now + 86400},
+        Item=expected,
         ConditionExpression="attribute_not_exists(action_id)",
     )
     result = call("APP_FUNCTION", action)
@@ -95,6 +112,7 @@ def emit_intent(event: dict[str, Any], context: Any) -> None:
 
 
 def app(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    evidence_v2 = c2_enabled()
     # Only an explicitly enabled lab invocation may omit the application intent.
     # The public authorization request schema still rejects simulation fields.
     suppress = (
@@ -105,14 +123,25 @@ def app(event: dict[str, Any], context: Any) -> dict[str, Any]:
         emit_intent(event, context)
     credential = call("ISSUER_FUNCTION", event)
     if "access_token" not in credential:
-        return {"status": "denied"}
+        return {"status": "unavailable" if evidence_v2 else "denied"}
+    if evidence_v2 and credential.get("evidence_contract") != "four-stage-issuance-envelope-2":
+        return {"status": "unavailable"}
     result = call("SAAS_FUNCTION", {**event, "access_token": credential["access_token"]})
+    if evidence_v2 and (
+        result.get("status") not in {"success", "denied"}
+        or result.get("evidence_contract") != "four-stage-provider-2"
+    ):
+        return {"status": "unavailable"}
     # Never return the token or the issuer payload to the client.
     return {"status": result["status"], "provider_request_id": result["provider_request_id"]}
 
 
 def issuer(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Private synthetic OAuth-like issuer; not a standards-complete OAuth server."""
+    if c2_enabled():
+        from sealed_telemetry.four_stage_binding import issue
+
+        return issue(event, int(time.time()))
     expected = (
         table("EXPECTED_TABLE")
         .get_item(Key={"action_id": event["action_id"]}, ConsistentRead=True)
@@ -140,6 +169,10 @@ def issuer(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
 
 def saas(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    if c2_enabled():
+        from sealed_telemetry.four_stage_binding import provider
+
+        return provider(event, int(time.time()))
     token = event.get("access_token", "")
     row = None
     if isinstance(token, str) and 16 <= len(token) <= 256:
