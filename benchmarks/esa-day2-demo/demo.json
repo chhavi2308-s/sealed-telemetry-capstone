@@ -1,0 +1,441 @@
+{
+  "authorized_activity": {
+    "scenario": "normal",
+    "integrity_valid": true,
+    "evidence": [
+      {
+        "event_id": "0d23c22a-da03-4bd4-b6c2-c7965a656194",
+        "source": "app",
+        "type": "INTENT_CREATED",
+        "outcome": "success"
+      },
+      {
+        "event_id": "815e4c5e-3ee8-42e9-a5a1-0d952db10304",
+        "source": "gateway",
+        "type": "EXPECTED_ACTION",
+        "outcome": "success"
+      },
+      {
+        "event_id": "8bc727b6-725b-42aa-a0f9-197c6ead49b0",
+        "source": "provider",
+        "type": "PROVIDER_ACTION",
+        "outcome": "success"
+      }
+    ],
+    "indexed_findings": [
+      {
+        "case_id": "5b08ccce-d94d-49c6-b6ae-2a2fb7a0a75b:8bc727b6-725b-42aa-a0f9-197c6ead49b0",
+        "state": "CONSISTENT",
+        "reason_codes": [
+          "MATCHED_EXPECTATION"
+        ],
+        "correlated_event_ids": [
+          "0d23c22a-da03-4bd4-b6c2-c7965a656194",
+          "815e4c5e-3ee8-42e9-a5a1-0d952db10304",
+          "8bc727b6-725b-42aa-a0f9-197c6ead49b0"
+        ]
+      }
+    ],
+    "exhaustive_findings": [
+      {
+        "case_id": "5b08ccce-d94d-49c6-b6ae-2a2fb7a0a75b:8bc727b6-725b-42aa-a0f9-197c6ead49b0",
+        "state": "CONSISTENT",
+        "reason_codes": [
+          "MATCHED_EXPECTATION"
+        ],
+        "correlated_event_ids": [
+          "0d23c22a-da03-4bd4-b6c2-c7965a656194",
+          "815e4c5e-3ee8-42e9-a5a1-0d952db10304",
+          "8bc727b6-725b-42aa-a0f9-197c6ead49b0"
+        ]
+      }
+    ],
+    "revisions": [
+      {
+        "case_id": "5b08ccce-d94d-49c6-b6ae-2a2fb7a0a75b:815e4c5e-3ee8-42e9-a5a1-0d952db10304",
+        "state": "PENDING",
+        "reason_codes": [
+          "WAITING_FOR_PROVIDER"
+        ],
+        "correlated_event_ids": [
+          "815e4c5e-3ee8-42e9-a5a1-0d952db10304"
+        ]
+      },
+      {
+        "case_id": "5b08ccce-d94d-49c6-b6ae-2a2fb7a0a75b:8bc727b6-725b-42aa-a0f9-197c6ead49b0",
+        "state": "CONSISTENT",
+        "reason_codes": [
+          "MATCHED_EXPECTATION"
+        ],
+        "correlated_event_ids": [
+          "0d23c22a-da03-4bd4-b6c2-c7965a656194",
+          "815e4c5e-3ee8-42e9-a5a1-0d952db10304",
+          "8bc727b6-725b-42aa-a0f9-197c6ead49b0"
+        ]
+      }
+    ],
+    "equivalent": true
+  },
+  "direct_oauth_token_replay": {
+    "scenario": "replay-suppression",
+    "integrity_valid": true,
+    "evidence": [
+      {
+        "event_id": "1b0974cb-7ebd-4b51-bbe2-c8490788cc36",
+        "source": "provider",
+        "type": "PROVIDER_ACTION",
+        "outcome": "success"
+      },
+      {
+        "event_id": "760c4458-3473-459b-9ea3-2ccc63a04e82",
+        "source": "gateway",
+        "type": "EXPECTED_ACTION",
+        "outcome": "success"
+      },
+      {
+        "event_id": "fb908811-9849-43dc-b5fa-3998d21e4cd3",
+        "source": "provider",
+        "type": "PROVIDER_ACTION",
+        "outcome": "success"
+      }
+    ],
+    "indexed_findings": [
+      {
+        "case_id": "5c519143-f243-426f-82d2-ada0e2e2e13b:1b0974cb-7ebd-4b51-bbe2-c8490788cc36",
+        "state": "INCONCLUSIVE",
+        "reason_codes": [
+          "APPLICATION_TELEMETRY_GAP"
+        ],
+        "correlated_event_ids": [
+          "1b0974cb-7ebd-4b51-bbe2-c8490788cc36",
+          "760c4458-3473-459b-9ea3-2ccc63a04e82"
+        ]
+      },
+      {
+        "case_id": "5c519143-f243-426f-82d2-ada0e2e2e13b:fb908811-9849-43dc-b5fa-3998d21e4cd3",
+        "state": "SUSPICIOUS",
+        "reason_codes": [
+          "UNMATCHED_PROVIDER_ACTION"
+        ],
+        "correlated_event_ids": [
+          "fb908811-9849-43dc-b5fa-3998d21e4cd3"
+        ]
+      }
+    ],
+    "exhaustive_findings": [
+      {
+        "case_id": "5c519143-f243-426f-82d2-ada0e2e2e13b:1b0974cb-7ebd-4b51-bbe2-c8490788cc36",
+        "state": "INCONCLUSIVE",
+        "reason_codes": [
+          "APPLICATION_TELEMETRY_GAP"
+        ],
+        "correlated_event_ids": [
+          "1b0974cb-7ebd-4b51-bbe2-c8490788cc36",
+          "760c4458-3473-459b-9ea3-2ccc63a04e82"
+        ]
+      },
+      {
+        "case_id": "5c519143-f243-426f-82d2-ada0e2e2e13b:fb908811-9849-43dc-b5fa-3998d21e4cd3",
+        "state": "SUSPICIOUS",
+        "reason_codes": [
+          "UNMATCHED_PROVIDER_ACTION"
+        ],
+        "correlated_event_ids": [
+          "fb908811-9849-43dc-b5fa-3998d21e4cd3"
+        ]
+      }
+    ],
+    "revisions": [
+      {
+        "case_id": "5c519143-f243-426f-82d2-ada0e2e2e13b:1b0974cb-7ebd-4b51-bbe2-c8490788cc36",
+        "state": "INCONCLUSIVE",
+        "reason_codes": [
+          "APPLICATION_TELEMETRY_GAP"
+        ],
+        "correlated_event_ids": [
+          "1b0974cb-7ebd-4b51-bbe2-c8490788cc36",
+          "760c4458-3473-459b-9ea3-2ccc63a04e82"
+        ]
+      },
+      {
+        "case_id": "5c519143-f243-426f-82d2-ada0e2e2e13b:760c4458-3473-459b-9ea3-2ccc63a04e82",
+        "state": "PENDING",
+        "reason_codes": [
+          "WAITING_FOR_PROVIDER"
+        ],
+        "correlated_event_ids": [
+          "760c4458-3473-459b-9ea3-2ccc63a04e82"
+        ]
+      },
+      {
+        "case_id": "5c519143-f243-426f-82d2-ada0e2e2e13b:fb908811-9849-43dc-b5fa-3998d21e4cd3",
+        "state": "SUSPICIOUS",
+        "reason_codes": [
+          "UNMATCHED_PROVIDER_ACTION"
+        ],
+        "correlated_event_ids": [
+          "fb908811-9849-43dc-b5fa-3998d21e4cd3"
+        ]
+      }
+    ],
+    "equivalent": true
+  },
+  "benign_application_log_failure": {
+    "scenario": "benign-log-failure",
+    "integrity_valid": true,
+    "evidence": [
+      {
+        "event_id": "3b562f61-201e-41f3-8615-a51a3dd82e6e",
+        "source": "gateway",
+        "type": "EXPECTED_ACTION",
+        "outcome": "success"
+      },
+      {
+        "event_id": "842be69f-167d-4988-ae6b-be02ae159829",
+        "source": "provider",
+        "type": "PROVIDER_ACTION",
+        "outcome": "success"
+      }
+    ],
+    "indexed_findings": [
+      {
+        "case_id": "8680e33f-06e3-4952-a305-adbdda69da5c:842be69f-167d-4988-ae6b-be02ae159829",
+        "state": "INCONCLUSIVE",
+        "reason_codes": [
+          "APPLICATION_TELEMETRY_GAP"
+        ],
+        "correlated_event_ids": [
+          "3b562f61-201e-41f3-8615-a51a3dd82e6e",
+          "842be69f-167d-4988-ae6b-be02ae159829"
+        ]
+      }
+    ],
+    "exhaustive_findings": [
+      {
+        "case_id": "8680e33f-06e3-4952-a305-adbdda69da5c:842be69f-167d-4988-ae6b-be02ae159829",
+        "state": "INCONCLUSIVE",
+        "reason_codes": [
+          "APPLICATION_TELEMETRY_GAP"
+        ],
+        "correlated_event_ids": [
+          "3b562f61-201e-41f3-8615-a51a3dd82e6e",
+          "842be69f-167d-4988-ae6b-be02ae159829"
+        ]
+      }
+    ],
+    "revisions": [
+      {
+        "case_id": "8680e33f-06e3-4952-a305-adbdda69da5c:3b562f61-201e-41f3-8615-a51a3dd82e6e",
+        "state": "PENDING",
+        "reason_codes": [
+          "WAITING_FOR_PROVIDER"
+        ],
+        "correlated_event_ids": [
+          "3b562f61-201e-41f3-8615-a51a3dd82e6e"
+        ]
+      },
+      {
+        "case_id": "8680e33f-06e3-4952-a305-adbdda69da5c:842be69f-167d-4988-ae6b-be02ae159829",
+        "state": "INCONCLUSIVE",
+        "reason_codes": [
+          "APPLICATION_TELEMETRY_GAP"
+        ],
+        "correlated_event_ids": [
+          "3b562f61-201e-41f3-8615-a51a3dd82e6e",
+          "842be69f-167d-4988-ae6b-be02ae159829"
+        ]
+      }
+    ],
+    "equivalent": true
+  },
+  "delayed_evidence_arrival": {
+    "scenario": "delayed-audit",
+    "integrity_valid": true,
+    "evidence": [
+      {
+        "event_id": "578e4907-60d3-4615-9f31-b4c5b2020dce",
+        "source": "gateway",
+        "type": "EXPECTED_ACTION",
+        "outcome": "success"
+      },
+      {
+        "event_id": "755cf948-e555-4851-9ca4-826efabc5762",
+        "source": "provider",
+        "type": "PROVIDER_ACTION",
+        "outcome": "success"
+      },
+      {
+        "event_id": "d6a80ae2-782a-4b24-ab33-7e86050408ee",
+        "source": "app",
+        "type": "INTENT_CREATED",
+        "outcome": "success"
+      }
+    ],
+    "indexed_findings": [
+      {
+        "case_id": "a41f5648-7de9-4bc7-bfb7-3cca6f68d2d3:755cf948-e555-4851-9ca4-826efabc5762",
+        "state": "CONSISTENT",
+        "reason_codes": [
+          "MATCHED_EXPECTATION"
+        ],
+        "correlated_event_ids": [
+          "578e4907-60d3-4615-9f31-b4c5b2020dce",
+          "755cf948-e555-4851-9ca4-826efabc5762",
+          "d6a80ae2-782a-4b24-ab33-7e86050408ee"
+        ]
+      }
+    ],
+    "exhaustive_findings": [
+      {
+        "case_id": "a41f5648-7de9-4bc7-bfb7-3cca6f68d2d3:755cf948-e555-4851-9ca4-826efabc5762",
+        "state": "CONSISTENT",
+        "reason_codes": [
+          "MATCHED_EXPECTATION"
+        ],
+        "correlated_event_ids": [
+          "578e4907-60d3-4615-9f31-b4c5b2020dce",
+          "755cf948-e555-4851-9ca4-826efabc5762",
+          "d6a80ae2-782a-4b24-ab33-7e86050408ee"
+        ]
+      }
+    ],
+    "revisions": [
+      {
+        "case_id": "a41f5648-7de9-4bc7-bfb7-3cca6f68d2d3:578e4907-60d3-4615-9f31-b4c5b2020dce",
+        "state": "PENDING",
+        "reason_codes": [
+          "WAITING_FOR_PROVIDER"
+        ],
+        "correlated_event_ids": [
+          "578e4907-60d3-4615-9f31-b4c5b2020dce"
+        ]
+      },
+      {
+        "case_id": "a41f5648-7de9-4bc7-bfb7-3cca6f68d2d3:755cf948-e555-4851-9ca4-826efabc5762",
+        "state": "CONSISTENT",
+        "reason_codes": [
+          "MATCHED_EXPECTATION"
+        ],
+        "correlated_event_ids": [
+          "578e4907-60d3-4615-9f31-b4c5b2020dce",
+          "755cf948-e555-4851-9ca4-826efabc5762",
+          "d6a80ae2-782a-4b24-ab33-7e86050408ee"
+        ]
+      }
+    ],
+    "equivalent": true
+  },
+  "ambiguous_legitimate_retry": {
+    "scenario": "legitimate-retry",
+    "integrity_valid": true,
+    "evidence": [
+      {
+        "event_id": "0bcfbd10-f360-4e2c-8732-b4227133b46e",
+        "source": "provider",
+        "type": "PROVIDER_ACTION",
+        "outcome": "success"
+      },
+      {
+        "event_id": "537277c6-374d-4631-9835-c2f50687c2b1",
+        "source": "app",
+        "type": "INTENT_CREATED",
+        "outcome": "success"
+      },
+      {
+        "event_id": "96d4df14-e647-4985-be88-515c8021e730",
+        "source": "provider",
+        "type": "PROVIDER_ACTION",
+        "outcome": "success"
+      },
+      {
+        "event_id": "b6f65f18-3297-4544-a244-91e716ce5c51",
+        "source": "gateway",
+        "type": "EXPECTED_ACTION",
+        "outcome": "success"
+      }
+    ],
+    "indexed_findings": [
+      {
+        "case_id": "4aabc46a-5aaf-43fd-8e53-fc31d7bca616:0bcfbd10-f360-4e2c-8732-b4227133b46e",
+        "state": "INCONCLUSIVE",
+        "reason_codes": [
+          "AMBIGUOUS_OR_REUSED_AUTHORIZATION"
+        ],
+        "correlated_event_ids": [
+          "0bcfbd10-f360-4e2c-8732-b4227133b46e",
+          "b6f65f18-3297-4544-a244-91e716ce5c51"
+        ]
+      },
+      {
+        "case_id": "4aabc46a-5aaf-43fd-8e53-fc31d7bca616:96d4df14-e647-4985-be88-515c8021e730",
+        "state": "INCONCLUSIVE",
+        "reason_codes": [
+          "AMBIGUOUS_OR_REUSED_AUTHORIZATION"
+        ],
+        "correlated_event_ids": [
+          "96d4df14-e647-4985-be88-515c8021e730",
+          "b6f65f18-3297-4544-a244-91e716ce5c51"
+        ]
+      }
+    ],
+    "exhaustive_findings": [
+      {
+        "case_id": "4aabc46a-5aaf-43fd-8e53-fc31d7bca616:0bcfbd10-f360-4e2c-8732-b4227133b46e",
+        "state": "INCONCLUSIVE",
+        "reason_codes": [
+          "AMBIGUOUS_OR_REUSED_AUTHORIZATION"
+        ],
+        "correlated_event_ids": [
+          "0bcfbd10-f360-4e2c-8732-b4227133b46e",
+          "b6f65f18-3297-4544-a244-91e716ce5c51"
+        ]
+      },
+      {
+        "case_id": "4aabc46a-5aaf-43fd-8e53-fc31d7bca616:96d4df14-e647-4985-be88-515c8021e730",
+        "state": "INCONCLUSIVE",
+        "reason_codes": [
+          "AMBIGUOUS_OR_REUSED_AUTHORIZATION"
+        ],
+        "correlated_event_ids": [
+          "96d4df14-e647-4985-be88-515c8021e730",
+          "b6f65f18-3297-4544-a244-91e716ce5c51"
+        ]
+      }
+    ],
+    "revisions": [
+      {
+        "case_id": "4aabc46a-5aaf-43fd-8e53-fc31d7bca616:0bcfbd10-f360-4e2c-8732-b4227133b46e",
+        "state": "INCONCLUSIVE",
+        "reason_codes": [
+          "AMBIGUOUS_OR_REUSED_AUTHORIZATION"
+        ],
+        "correlated_event_ids": [
+          "0bcfbd10-f360-4e2c-8732-b4227133b46e",
+          "b6f65f18-3297-4544-a244-91e716ce5c51"
+        ]
+      },
+      {
+        "case_id": "4aabc46a-5aaf-43fd-8e53-fc31d7bca616:96d4df14-e647-4985-be88-515c8021e730",
+        "state": "INCONCLUSIVE",
+        "reason_codes": [
+          "AMBIGUOUS_OR_REUSED_AUTHORIZATION"
+        ],
+        "correlated_event_ids": [
+          "96d4df14-e647-4985-be88-515c8021e730",
+          "b6f65f18-3297-4544-a244-91e716ce5c51"
+        ]
+      },
+      {
+        "case_id": "4aabc46a-5aaf-43fd-8e53-fc31d7bca616:b6f65f18-3297-4544-a244-91e716ce5c51",
+        "state": "PENDING",
+        "reason_codes": [
+          "WAITING_FOR_PROVIDER"
+        ],
+        "correlated_event_ids": [
+          "b6f65f18-3297-4544-a244-91e716ce5c51"
+        ]
+      }
+    ],
+    "equivalent": true
+  }
+}

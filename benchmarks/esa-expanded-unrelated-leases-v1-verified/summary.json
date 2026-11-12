@@ -1,0 +1,41 @@
+{
+  "version": "esa-expanded-unrelated-leases-v1",
+  "seeds": [
+    8201,
+    8202,
+    8203
+  ],
+  "trials_per_scenario_seed": 10,
+  "scenarios": [
+    "unrelated_lease_unmatched_provider",
+    "unrelated_lease_benign_control"
+  ],
+  "runs": 60,
+  "scenario_counts": {
+    "unrelated_lease_unmatched_provider": 30,
+    "unrelated_lease_benign_control": 30
+  },
+  "metrics": {
+    "n": 60,
+    "tp": 30,
+    "fp": 0,
+    "fn": 0,
+    "tn": 30,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "false_positive_rate": 0.0,
+    "inconclusive_rate": 0.5,
+    "recall_wilson_95": [
+      0.8864829086095221,
+      1
+    ],
+    "fpr_wilson_95": [
+      0,
+      0.113517091390478
+    ]
+  },
+  "mode_equivalence": true,
+  "failures": [],
+  "limitations": "Synthetic deterministic evidence; this supplements rather than changes the frozen 40-calibration/180-test study."
+}

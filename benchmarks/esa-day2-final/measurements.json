@@ -1,0 +1,502 @@
+{
+  "seed": 20261112,
+  "repeats": 5,
+  "rows": [
+    {
+      "workload": "sparse",
+      "size": 250,
+      "expected": 250,
+      "observed": 250,
+      "index_build": {
+        "runtime": {
+          "median_ms": 1.4164,
+          "min_ms": 1.3965,
+          "max_ms": 1.7516,
+          "stdev_ms": 0.13502283658700107
+        },
+        "peak_bytes_median": 22384,
+        "samples_ms": [
+          1.7516,
+          1.548,
+          1.4164,
+          1.4108,
+          1.3965
+        ]
+      },
+      "lookup": {
+        "runtime": {
+          "median_ms": 4.4605,
+          "min_ms": 4.36,
+          "max_ms": 4.7975,
+          "stdev_ms": 0.1491784247134954
+        },
+        "peak_bytes_median": 29188,
+        "predicate_calls_median": 334,
+        "candidates_returned_median": 250,
+        "samples_ms": [
+          4.7975,
+          4.4605,
+          4.481,
+          4.36,
+          4.4568
+        ]
+      },
+      "indexed": {
+        "runtime": {
+          "median_ms": 75.9103,
+          "min_ms": 73.8598,
+          "max_ms": 97.9485,
+          "stdev_ms": 9.10374769914017
+        },
+        "peak_bytes_median": 430258,
+        "predicate_calls_median": 62834
+      },
+      "exhaustive": {
+        "runtime": {
+          "median_ms": 124.4285,
+          "min_ms": 115.6748,
+          "max_ms": 146.3694,
+          "stdev_ms": 12.198900578888246
+        },
+        "peak_bytes_median": 415230,
+        "predicate_calls_median": 125000
+      },
+      "candidate_sets_equal": true,
+      "findings_equal": true
+    },
+    {
+      "workload": "sparse",
+      "size": 1000,
+      "expected": 1000,
+      "observed": 1000,
+      "index_build": {
+        "runtime": {
+          "median_ms": 6.5708,
+          "min_ms": 6.5257,
+          "max_ms": 9.3153,
+          "stdev_ms": 1.0813009860348786
+        },
+        "peak_bytes_median": 113832,
+        "samples_ms": [
+          7.6119,
+          9.3153,
+          6.5535,
+          6.5257,
+          6.5708
+        ]
+      },
+      "lookup": {
+        "runtime": {
+          "median_ms": 20.4024,
+          "min_ms": 20.3169,
+          "max_ms": 23.2149,
+          "stdev_ms": 1.1800217228508973
+        },
+        "peak_bytes_median": 115144,
+        "predicate_calls_median": 1369,
+        "candidates_returned_median": 1000,
+        "samples_ms": [
+          22.1361,
+          20.4024,
+          20.392,
+          23.2149,
+          20.3169
+        ]
+      },
+      "indexed": {
+        "runtime": {
+          "median_ms": 2599.5976,
+          "min_ms": 1084.8704,
+          "max_ms": 3359.0303,
+          "stdev_ms": 830.5164146692658
+        },
+        "peak_bytes_median": 1737886,
+        "predicate_calls_median": 1001369
+      },
+      "exhaustive": {
+        "runtime": {
+          "median_ms": 5511.0197,
+          "min_ms": 5493.0748,
+          "max_ms": 6331.7891,
+          "stdev_ms": 391.48959535742136
+        },
+        "peak_bytes_median": 1661622,
+        "predicate_calls_median": 2000000
+      },
+      "candidate_sets_equal": true,
+      "findings_equal": true
+    },
+    {
+      "workload": "dense",
+      "size": 100,
+      "expected": 100,
+      "observed": 25,
+      "index_build": {
+        "runtime": {
+          "median_ms": 1.8568,
+          "min_ms": 1.6473,
+          "max_ms": 3.4662,
+          "stdev_ms": 0.6734349132618535
+        },
+        "peak_bytes_median": 4818,
+        "samples_ms": [
+          2.5222,
+          3.4662,
+          1.6473,
+          1.8568,
+          1.8062
+        ]
+      },
+      "lookup": {
+        "runtime": {
+          "median_ms": 76.4178,
+          "min_ms": 69.8639,
+          "max_ms": 87.9488,
+          "stdev_ms": 6.840450057298863
+        },
+        "peak_bytes_median": 23070,
+        "predicate_calls_median": 2500,
+        "candidates_returned_median": 2500,
+        "samples_ms": [
+          84.0176,
+          72.5061,
+          76.4178,
+          69.8639,
+          87.9488
+        ]
+      },
+      "indexed": {
+        "runtime": {
+          "median_ms": 100.9981,
+          "min_ms": 94.5532,
+          "max_ms": 117.7336,
+          "stdev_ms": 7.87639330114996
+        },
+        "peak_bytes_median": 323824,
+        "predicate_calls_median": 2500
+      },
+      "exhaustive": {
+        "runtime": {
+          "median_ms": 103.4428,
+          "min_ms": 90.6532,
+          "max_ms": 135.7994,
+          "stdev_ms": 16.508103862479178
+        },
+        "peak_bytes_median": 319718,
+        "predicate_calls_median": 2500
+      },
+      "candidate_sets_equal": true,
+      "findings_equal": true
+    },
+    {
+      "workload": "dense",
+      "size": 250,
+      "expected": 250,
+      "observed": 62,
+      "index_build": {
+        "runtime": {
+          "median_ms": 5.3297,
+          "min_ms": 4.7935,
+          "max_ms": 5.4587,
+          "stdev_ms": 0.23712385287018267
+        },
+        "peak_bytes_median": 13292,
+        "samples_ms": [
+          5.3297,
+          5.3769,
+          4.7935,
+          5.4587,
+          5.1451
+        ]
+      },
+      "lookup": {
+        "runtime": {
+          "median_ms": 462.4599,
+          "min_ms": 428.5885,
+          "max_ms": 480.6983,
+          "stdev_ms": 17.383211934461364
+        },
+        "peak_bytes_median": 135918,
+        "predicate_calls_median": 15500,
+        "candidates_returned_median": 15500,
+        "samples_ms": [
+          428.5885,
+          462.4599,
+          469.3668,
+          480.6983,
+          458.5827
+        ]
+      },
+      "indexed": {
+        "runtime": {
+          "median_ms": 606.6324,
+          "min_ms": 591.257,
+          "max_ms": 682.8581,
+          "stdev_ms": 36.21392190594111
+        },
+        "peak_bytes_median": 1800330,
+        "predicate_calls_median": 15500
+      },
+      "exhaustive": {
+        "runtime": {
+          "median_ms": 598.7204,
+          "min_ms": 574.9329,
+          "max_ms": 771.1175,
+          "stdev_ms": 73.35418808960806
+        },
+        "peak_bytes_median": 1789948,
+        "predicate_calls_median": 15500
+      },
+      "candidate_sets_equal": true,
+      "findings_equal": true
+    },
+    {
+      "workload": "concurrent",
+      "size": 250,
+      "expected": 250,
+      "observed": 250,
+      "index_build": {
+        "runtime": {
+          "median_ms": 6.1869,
+          "min_ms": 4.3512,
+          "max_ms": 6.6332,
+          "stdev_ms": 0.83552798492929
+        },
+        "peak_bytes_median": 22236,
+        "samples_ms": [
+          4.3512,
+          5.9326,
+          6.1869,
+          6.6332,
+          6.5917
+        ]
+      },
+      "lookup": {
+        "runtime": {
+          "median_ms": 17.1446,
+          "min_ms": 15.8273,
+          "max_ms": 19.1058,
+          "stdev_ms": 1.1946742561886898
+        },
+        "peak_bytes_median": 28688,
+        "predicate_calls_median": 334,
+        "candidates_returned_median": 250,
+        "samples_ms": [
+          15.8782,
+          17.2333,
+          17.1446,
+          15.8273,
+          19.1058
+        ]
+      },
+      "indexed": {
+        "runtime": {
+          "median_ms": 318.9266,
+          "min_ms": 312.0664,
+          "max_ms": 393.2181,
+          "stdev_ms": 30.290323056144512
+        },
+        "peak_bytes_median": 429824,
+        "predicate_calls_median": 62834
+      },
+      "exhaustive": {
+        "runtime": {
+          "median_ms": 882.8523,
+          "min_ms": 537.2237,
+          "max_ms": 1135.1942,
+          "stdev_ms": 253.99584196604005
+        },
+        "peak_bytes_median": 416494,
+        "predicate_calls_median": 125000
+      },
+      "candidate_sets_equal": true,
+      "findings_equal": true
+    },
+    {
+      "workload": "concurrent",
+      "size": 1000,
+      "expected": 1000,
+      "observed": 1000,
+      "index_build": {
+        "runtime": {
+          "median_ms": 110.2645,
+          "min_ms": 75.8104,
+          "max_ms": 153.3554,
+          "stdev_ms": 28.916943131416918
+        },
+        "peak_bytes_median": 112462,
+        "samples_ms": [
+          75.8104,
+          110.2645,
+          122.6188,
+          153.3554,
+          78.523
+        ]
+      },
+      "lookup": {
+        "runtime": {
+          "median_ms": 274.8975,
+          "min_ms": 129.4022,
+          "max_ms": 451.6224,
+          "stdev_ms": 112.43577143871252
+        },
+        "peak_bytes_median": 115194,
+        "predicate_calls_median": 1376,
+        "candidates_returned_median": 1000,
+        "samples_ms": [
+          166.0125,
+          279.4651,
+          274.8975,
+          451.6224,
+          129.4022
+        ]
+      },
+      "indexed": {
+        "runtime": {
+          "median_ms": 884.5215,
+          "min_ms": 752.6197,
+          "max_ms": 1321.0133,
+          "stdev_ms": 204.0690753095922
+        },
+        "peak_bytes_median": 1742512,
+        "predicate_calls_median": 1001376
+      },
+      "exhaustive": {
+        "runtime": {
+          "median_ms": 1389.3692,
+          "min_ms": 1374.8096,
+          "max_ms": 1436.0641,
+          "stdev_ms": 21.11390928249906
+        },
+        "peak_bytes_median": 1661298,
+        "predicate_calls_median": 2000000
+      },
+      "candidate_sets_equal": true,
+      "findings_equal": true
+    },
+    {
+      "workload": "unrelated",
+      "size": 250,
+      "expected": 250,
+      "observed": 250,
+      "index_build": {
+        "runtime": {
+          "median_ms": 3.6103,
+          "min_ms": 2.9292,
+          "max_ms": 3.6984,
+          "stdev_ms": 0.3504967937085874
+        },
+        "peak_bytes_median": 81438,
+        "samples_ms": [
+          3.6984,
+          3.6173,
+          3.6103,
+          2.9292,
+          2.9295
+        ]
+      },
+      "lookup": {
+        "runtime": {
+          "median_ms": 0.1046,
+          "min_ms": 0.0929,
+          "max_ms": 0.1595,
+          "stdev_ms": 0.026199190827199226
+        },
+        "peak_bytes_median": 11812,
+        "predicate_calls_median": 0,
+        "candidates_returned_median": 0,
+        "samples_ms": [
+          0.1358,
+          0.1595,
+          0.1046,
+          0.0938,
+          0.0929
+        ]
+      },
+      "indexed": {
+        "runtime": {
+          "median_ms": 26.355,
+          "min_ms": 22.9721,
+          "max_ms": 28.7408,
+          "stdev_ms": 1.9273293781811138
+        },
+        "peak_bytes_median": 589762,
+        "predicate_calls_median": 0
+      },
+      "exhaustive": {
+        "runtime": {
+          "median_ms": 53.1546,
+          "min_ms": 51.6414,
+          "max_ms": 57.9789,
+          "stdev_ms": 2.1732176503976786
+        },
+        "peak_bytes_median": 545576,
+        "predicate_calls_median": 62500
+      },
+      "candidate_sets_equal": true,
+      "findings_equal": true
+    },
+    {
+      "workload": "unrelated",
+      "size": 1000,
+      "expected": 1000,
+      "observed": 1000,
+      "index_build": {
+        "runtime": {
+          "median_ms": 14.0477,
+          "min_ms": 13.0664,
+          "max_ms": 15.8361,
+          "stdev_ms": 0.9341073437244779
+        },
+        "peak_bytes_median": 402360,
+        "samples_ms": [
+          15.8361,
+          14.0477,
+          13.6109,
+          14.3773,
+          13.0664
+        ]
+      },
+      "lookup": {
+        "runtime": {
+          "median_ms": 0.5443,
+          "min_ms": 0.5139,
+          "max_ms": 0.6557,
+          "stdev_ms": 0.04959483844111197
+        },
+        "peak_bytes_median": 60468,
+        "predicate_calls_median": 0,
+        "candidates_returned_median": 0,
+        "samples_ms": [
+          0.5443,
+          0.5639,
+          0.6557,
+          0.5322,
+          0.5139
+        ]
+      },
+      "indexed": {
+        "runtime": {
+          "median_ms": 107.812,
+          "min_ms": 104.2791,
+          "max_ms": 130.6941,
+          "stdev_ms": 9.941082961327702
+        },
+        "peak_bytes_median": 2350624,
+        "predicate_calls_median": 0
+      },
+      "exhaustive": {
+        "runtime": {
+          "median_ms": 697.4726,
+          "min_ms": 662.8336,
+          "max_ms": 819.4306,
+          "stdev_ms": 53.83902470537148
+        },
+        "peak_bytes_median": 2161770,
+        "predicate_calls_median": 1000000
+      },
+      "candidate_sets_equal": true,
+      "findings_equal": true
+    }
+  ]
+}

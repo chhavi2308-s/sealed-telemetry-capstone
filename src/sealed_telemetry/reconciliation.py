@@ -1,6 +1,8 @@
 """Pure IBER rules: labels and scenario ground truth are deliberately absent."""
 
 import math
+from bisect import bisect_left, bisect_right
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any
 
@@ -32,8 +34,76 @@ class Policy:
 DEFAULT_POLICY = Policy()
 
 
+MatchKey = tuple[str, str, str, str]
+
+
+def _match_key(event: Evidence) -> MatchKey:
+    """Fields that must be exactly equal before an authoritative match can succeed."""
+    return (
+        event.credential_fingerprint,
+        event.operation,
+        event.resource_pseudonym,
+        event.actor_pseudonym,
+    )
+
+
+def exhaustive_candidates(
+    expected: list[Evidence], observed: Evidence, policy: Policy
+) -> list[Evidence]:
+    """Original exhaustive candidate generator retained as the reference fallback."""
+    return [candidate for candidate in expected if matches(candidate, observed, policy)]
+
+
+class ExpectedActionIndex:
+    """Temporal index that narrows expected-action candidates without deciding matches.
+
+    Each bucket is keyed only by fields which `matches()` requires to be identical.
+    It is time-sorted so range selection honours the same inclusive clock-skew
+    boundary. The original predicate remains the final authority, including IDs.
+    """
+
+    def __init__(self, expected: list[Evidence]) -> None:
+        self.expected = tuple(expected)
+        buckets: dict[MatchKey, list[tuple[float, int, Evidence]]] = defaultdict(list)
+        for position, event in enumerate(expected):
+            buckets[_match_key(event)].append(
+                (timestamp(event.event_time_utc).timestamp(), position, event)
+            )
+        self._buckets: dict[
+            MatchKey, tuple[tuple[float, ...], tuple[tuple[int, Evidence], ...]]
+        ] = {}
+        for key, values in buckets.items():
+            values.sort(key=lambda value: (value[0], value[1]))
+            self._buckets[key] = (
+                tuple(value[0] for value in values),
+                tuple((value[1], value[2]) for value in values),
+            )
+
+    def candidates(self, observed: Evidence, policy: Policy) -> list[Evidence]:
+        bucket = self._buckets.get(_match_key(observed))
+        if bucket is None:
+            return []
+        times, entries = bucket
+        observed_at = timestamp(observed.event_time_utc).timestamp()
+        bound = policy.matching_window + policy.clock_skew
+        start = bisect_left(times, observed_at - bound)
+        end = bisect_right(times, observed_at + bound)
+        # Restore input order so the index is a drop-in replacement for the old loop.
+        plausible = sorted(entries[start:end], key=lambda value: value[0])
+        return [event for _, event in plausible if matches(event, observed, policy)]
+
+    def exhaustive_candidates(self, observed: Evidence, policy: Policy) -> list[Evidence]:
+        """Reference fallback for callers/tests requiring the original full scan."""
+        return exhaustive_candidates(list(self.expected), observed, policy)
+
+
 def reconcile(
-    events: list[Evidence], now: str, health: dict[str, bool], policy: Policy = DEFAULT_POLICY
+    events: list[Evidence],
+    now: str,
+    health: dict[str, bool],
+    policy: Policy = DEFAULT_POLICY,
+    *,
+    candidate_mode: str = "indexed",
 ) -> list[dict[str, Any]]:
     """One case per provider observation or unmatched trusted expectation.
 
@@ -41,13 +111,20 @@ def reconcile(
     same action ID cannot borrow the same authorization. Ambiguous candidates
     remain inconclusive. Worst case O(n²); batch sizes must be bounded by callers.
     """
+    if candidate_mode not in {"indexed", "exhaustive"}:
+        raise ValueError("candidate mode must be indexed or exhaustive")
     expected = [e for e in events if e.event_type == "EXPECTED_ACTION"]
     observed = [e for e in events if e.event_type == "PROVIDER_ACTION"]
     intents = [e for e in events if e.event_type == "INTENT_CREATED"]
     results = []
     candidates: dict[str, list[Evidence]] = {}
-    for obs in observed:
-        candidates[obs.event_id] = [exp for exp in expected if matches(exp, obs, policy)]
+    if observed and candidate_mode == "indexed":
+        index = ExpectedActionIndex(expected)
+        for obs in observed:
+            candidates[obs.event_id] = index.candidates(obs, policy)
+    elif observed:
+        for obs in observed:
+            candidates[obs.event_id] = exhaustive_candidates(expected, obs, policy)
     # Reserve exact invocation/action bindings before attempting lower confidence fallback.
     # An external replay cannot consume an expectation already used by its legitimate call.
     exact_owners: dict[str, set[str]] = {}
