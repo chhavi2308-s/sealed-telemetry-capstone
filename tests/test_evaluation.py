@@ -3,15 +3,20 @@ from sealed_telemetry.evaluation import experiment, metrics
 
 def test_metrics_denominators():
     data = [
-        dict(attack=True, prediction=True, inconclusive=False),
-        dict(attack=False, prediction=True, inconclusive=False),
-        dict(attack=True, prediction=False, inconclusive=True),
-        dict(attack=False, prediction=False, inconclusive=False),
+        dict(attack=True, prediction=True, pending=False, inconclusive=False),
+        dict(attack=False, prediction=True, pending=False, inconclusive=False),
+        dict(attack=True, prediction=False, pending=True, inconclusive=False),
+        dict(attack=False, prediction=False, pending=False, inconclusive=True),
     ]
     result = metrics(data)
     assert result["precision"] == result["recall"] == result["f1"] == 0.5
     assert result["false_positive_rate"] == 0.5
-    assert result["inconclusive_rate"] == 0.25
+    assert result["alert_count"] == 2
+    assert result["alert_coverage"] == 0.5
+    assert result["pending_count"] == result["inconclusive_count"] == 1
+    assert result["pending_rate"] == result["inconclusive_rate"] == 0.25
+    assert result["uncertainty_count"] == 2
+    assert result["uncertainty_rate"] == 0.5
     assert metrics([])["precision"] is None
 
 

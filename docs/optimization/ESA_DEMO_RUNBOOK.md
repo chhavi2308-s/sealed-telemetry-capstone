@@ -2,8 +2,8 @@
 
 ## Scope and environment
 
-Run in a **fresh clone or fresh ESA worktree** of branch
-`feature/esa-temporal-index`, baseline `8b219102ebe2c29c04972a1a6a4fc44d444a244c`,
+Run in a **fresh clone or fresh ESA worktree** from ESA baseline
+`3f3afad8683b72094b30e2017be626fa23bbeccb`,
 with Python 3.12 and the locked development dependencies installed. These
 commands are local-only: they do not use AWS credentials, call an endpoint,
 read a secret, or modify infrastructure.
@@ -13,12 +13,13 @@ worktree, or alter only the output path for a new local capture; do not delete
 evidence as part of a demo.
 
 ```powershell
-$env:PYTHONPATH='src'
-..\test-env\Scripts\python.exe scripts\benchmark_temporal_index.py
-..\test-env\Scripts\python.exe scripts\esa_day2_demo.py
-..\test-env\Scripts\python.exe -m sealed_telemetry.study --output benchmarks\esa-evaluation --trials 5
-..\test-env\Scripts\python.exe scripts\esa_expanded_unrelated_leases.py
-..\test-env\Scripts\python.exe scripts\esa_forensic_demo.py
+$env:PYTHONPATH='src;.'
+..\test-env\Scripts\python.exe scripts\benchmark_temporal_index.py --output benchmarks\esa-phase-remaining\benchmark
+..\test-env\Scripts\python.exe scripts\esa_day2_demo.py --output benchmarks\esa-phase-remaining\five-scenarios
+..\test-env\Scripts\python.exe scripts\esa_corroborated_demo.py --output benchmarks\esa-phase-remaining\corroborated
+..\test-env\Scripts\python.exe -m sealed_telemetry.study --output benchmarks\esa-phase-remaining\evaluation --trials 5
+..\test-env\Scripts\python.exe scripts\esa_expanded_unrelated_leases.py --output benchmarks\esa-phase-remaining\unrelated-leases
+..\test-env\Scripts\python.exe scripts\esa_forensic_demo.py --output benchmarks\esa-phase-remaining\forensic
 ```
 
 ## 1. Indexed temporal benchmark
@@ -60,11 +61,13 @@ runs and 180 test runs: 12 registered test cases × three fixed seeds × five
 trials. Inspect `benchmarks/esa-evaluation/summary.json`.
 
 The captured IBER result is TP 45, FP 0, FN 15, TN 120; precision 1.0, recall
-0.75, F1 0.8571428571, FPR 0.0, and inconclusive-run rate 0.6667. Pending and
-inconclusive findings are not alerts: the metric’s prediction is an observed
-`SUSPICIOUS` or `CORROBORATED_SUSPECTED_ABUSE` finding, while uncertainty is
-counted separately. The 0-FP observation has a Wilson FPR upper bound of about
-3.1%; it is not a population guarantee.
+0.75, F1 0.8571428571, and FPR 0.0. `alert_coverage` is the share of evaluated
+runs with an observed `SUSPICIOUS` or `CORROBORATED_SUSPECTED_ABUSE` finding:
+45/180 = 0.25 for IBER. `PENDING` and `INCONCLUSIVE` are separate non-alert
+states; this final-horizon run has 0 pending and 120 inconclusive results.
+`uncertainty_rate` remains the union of those states for continuity. The 0-FP
+observation has a Wilson FPR upper bound of about 3.1%; it is not a population
+guarantee.
 
 Run `scripts/esa_expanded_unrelated_leases.py` for the separately versioned
 supplement, `esa-expanded-unrelated-leases-v1`. It runs three fixed seeds and
@@ -80,6 +83,16 @@ The captured supplement reports TP30/FP0/FN0/TN30, 0.5 inconclusive-rate from
 the unmatched leases' provider-evidence gaps, no failures, and complete
 indexed/exhaustive equivalence. It does not modify the frozen 40/180 baseline
 or tune IBER.
+
+## 3a. Corroborated-abuse rule demonstration
+
+Run `scripts/esa_corroborated_demo.py` into a fresh output directory. It feeds
+the real engine a synthetic, source-attributed responder revocation success and
+a later successful provider action for the same credential. It does not hardcode
+the decision: both indexed and exhaustive modes must derive
+`CORROBORATED_SUSPECTED_ABUSE / SUCCESS_AFTER_VERIFIED_REVOCATION` from the
+existing rule. The output explicitly says that these fixtures are neither live
+nor independent evidence.
 
 ## 4. Forensic reconstruction
 
@@ -107,19 +120,21 @@ $env:PYTHONPATH='src'
 git diff --check
 ```
 
-Recorded validation: 384 full-suite tests passed in 283.75 seconds; a focused
-ESA/security/admission subset had 89 passing tests; strict mypy passed over 36
-source files; Ruff, format and whitespace passed. The existing cfn-lint Python
-API found no issues in the five unchanged infrastructure templates for
-`ap-south-1`. CloudFormation Guard was deliberately deferred and did not run.
-The SAM CLI was unavailable, so SAM-specific validation did not run.
+Recorded follow-on validation: 385 tests passed in complete non-overlapping
+batches; strict mypy passed over 36 source files; Ruff, format and whitespace
+passed. The cfn-lint Python API found zero findings in the five unchanged
+infrastructure templates for `ap-south-1`. CloudFormation Guard remains
+deferred by owner decision and did not run. The SAM CLI was unavailable, so
+SAM-specific validation did not run.
 
 ## Existing AWS evidence (do not rerun here)
 
 Prior project records report a successful C2 deployment and one live synthetic
 smoke test. C4 was deployed with `UPDATE_COMPLETE` and 84 recorded deployment
-checks. This runbook neither queries AWS nor invokes a live endpoint; the C4
-live smoke remains **not tested** until separately authorized.
+checks. A separately authorized C4 evidence-path smoke recorded one HTTP 200,
+C2/C4 linkage, and source-owned HMAC/context version `v1` records. It did not
+invoke the collector or monitor, establish healthy sources, recompute HMACs,
+or independently verify the evidence path.
 
 ## Explicit limitations
 

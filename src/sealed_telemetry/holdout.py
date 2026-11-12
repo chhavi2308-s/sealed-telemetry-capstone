@@ -186,10 +186,12 @@ def run(
                 }
                 if case == "tampering" and report["timeline"]:
                     report["timeline"][0]["receipt"]["canonical_hash"] = "0" * 64
-                for name, (predicted, _) in predictions(report, policy).items():
+                for name, (predicted, _, _) in predictions(report, policy).items():
                     if predicted and name not in first_detection:
                         first_detection[name] = tick
-            for detector, (prediction, uncertain) in predictions(report, policy).items():
+            for detector, (prediction, pending, inconclusive) in predictions(
+                report, policy
+            ).items():
                 rows.append(
                     {
                         "run_id": label["run_id"],
@@ -198,7 +200,8 @@ def run(
                         "detector": detector,
                         "prediction": detector in first_detection,
                         "final_prediction": prediction,
-                        "inconclusive": uncertain,
+                        "pending": pending,
+                        "inconclusive": inconclusive,
                         "attack": label["attack"],
                         "virtual_detection_latency_seconds": first_detection.get(detector)
                         if label["attack"]

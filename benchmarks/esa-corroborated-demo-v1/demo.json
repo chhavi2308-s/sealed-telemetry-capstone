@@ -1,0 +1,21 @@
+{
+  "scenario": "post-revocation-provider-success",
+  "evidence_origin": "synthetic source-attributed fixtures; not independent or live evidence",
+  "indexed_exhaustive_equal": true,
+  "findings": [
+    {
+      "state": "CORROBORATED_SUSPECTED_ABUSE",
+      "reason_codes": [
+        "SUCCESS_AFTER_VERIFIED_REVOCATION"
+      ],
+      "correlated_event_ids": [
+        "b06328b4-a27b-486d-bea4-477f47dde198",
+        "c2a44eac-dc29-482d-a5a6-7dd456d55743"
+      ]
+    }
+  ],
+  "limitations": [
+    "No provider accepted an actual post-revocation request in this local fixture.",
+    "This demonstrates an existing reconciliation rule, not independent evidence."
+  ]
+}

@@ -1,5 +1,6 @@
 """Reproducible local comparison of IBER candidate modes; no AWS resources."""
 
+import argparse
 import json
 import statistics
 import time
@@ -234,4 +235,6 @@ def run(output: Path, repeats=5):
 
 
 if __name__ == "__main__":
-    print(json.dumps(run(Path("benchmarks/esa-day2-final")), indent=2))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, default=Path("benchmarks/esa-day2-final"))
+    print(json.dumps(run(parser.parse_args().output), indent=2))

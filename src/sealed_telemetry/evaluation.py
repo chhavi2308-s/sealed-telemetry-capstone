@@ -31,6 +31,12 @@ def metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         half = z * math.sqrt(p * (1 - p) / d + z * z / (4 * d * d)) / (1 + z * z / d)
         return [max(0, center - half), min(1, center + half)]
 
+    pending_count = sum(bool(r.get("pending", False)) for r in rows)
+    inconclusive_count = sum(bool(r.get("inconclusive", False)) for r in rows)
+    uncertainty_count = sum(
+        bool(r.get("pending", False)) or bool(r.get("inconclusive", False)) for r in rows
+    )
+    alert_count = sum(bool(r["prediction"]) for r in rows)
     return {
         "n": len(rows),
         "tp": tp,
@@ -41,7 +47,16 @@ def metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "recall": ratio(tp, tp + fn),
         "f1": ratio(2 * tp, 2 * tp + fp + fn),
         "false_positive_rate": ratio(fp, fp + tn),
-        "inconclusive_rate": ratio(sum(r["inconclusive"] for r in rows), len(rows)),
+        # An alert is a SUSPICIOUS or CORROBORATED_SUSPECTED_ABUSE outcome.
+        # PENDING and INCONCLUSIVE remain non-alert uncertainty states.
+        "alert_count": alert_count,
+        "alert_coverage": ratio(alert_count, len(rows)),
+        "pending_count": pending_count,
+        "pending_rate": ratio(pending_count, len(rows)),
+        "inconclusive_count": inconclusive_count,
+        "inconclusive_rate": ratio(inconclusive_count, len(rows)),
+        "uncertainty_count": uncertainty_count,
+        "uncertainty_rate": ratio(uncertainty_count, len(rows)),
         "recall_wilson_95": wilson(tp, tp + fn),
         "fpr_wilson_95": wilson(fp, fp + tn),
     }
@@ -49,7 +64,7 @@ def metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 def predictions(
     report: dict[str, Any], policy: Policy = DEFAULT_POLICY
-) -> dict[str, tuple[bool, bool]]:
+) -> dict[str, tuple[bool, bool, bool]]:
     events = [Evidence.parse(r["event"], r["event"]["source_id"]) for r in report["timeline"]]
     observed = [e for e in events if e.event_type == "PROVIDER_ACTION"]
     intents = [e for e in events if e.event_type == "INTENT_CREATED"]
@@ -62,17 +77,19 @@ def predictions(
         digest(r["event"]) == r["receipt"]["canonical_hash"] for r in report["timeline"]
     )
 
-    def outcome(ds: list[dict[str, Any]]) -> tuple[bool, bool]:
+    def outcome(ds: list[dict[str, Any]]) -> tuple[bool, bool, bool]:
         return (
             any(d["state"] in {"SUSPICIOUS", "CORROBORATED_SUSPECTED_ABUSE"} for d in ds),
-            any(d["state"] in {"INCONCLUSIVE", "PENDING"} for d in ds),
+            any(d["state"] == "PENDING" for d in ds),
+            any(d["state"] == "INCONCLUSIVE" for d in ds),
         )
 
     return {
-        "app_only": (any(e.outcome == "failure" for e in intents), not bool(intents)),
+        "app_only": (any(e.outcome == "failure" for e in intents), False, not bool(intents)),
         # Clearly defined weak baseline: missing invocation metadata on successful audit.
         "audit_only": (
             any(e.outcome == "success" and not e.invocation_id for e in observed),
+            False,
             not bool(observed),
         ),
         "fixed_missing": (
@@ -80,11 +97,12 @@ def predictions(
                 (timestamp(now) - timestamp(e.event_time_utc)).total_seconds() >= 15 for e in events
             )
             and len([e for e in observed if e.outcome == "success"]) != len(intents),
+            False,
             not any(
                 (timestamp(now) - timestamp(e.event_time_utc)).total_seconds() >= 15 for e in events
             ),
         ),
-        "iber": outcome(findings) if integrity else (False, True),
+        "iber": outcome(findings) if integrity else (False, False, True),
         "without_deadlines": outcome(
             reconcile(
                 events,
@@ -141,14 +159,15 @@ def experiment(directory: Path, seed: int, trials: int) -> dict[str, Any]:
                 ),
             }
         )
-        for detector, (pred, uncertain) in outputs.items():
+        for detector, (pred, pending, inconclusive) in outputs.items():
             rows.append(
                 {
                     "run_id": result["run_id"],
                     "detector": detector,
                     "attack": label["attack"],
                     "prediction": pred,
-                    "inconclusive": uncertain,
+                    "pending": pending,
+                    "inconclusive": inconclusive,
                     "local_runtime_seconds": elapsed,
                 }
             )

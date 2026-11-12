@@ -1,5 +1,6 @@
 """Run five real local IBER scenarios and compare indexed/exhaustive findings."""
 
+import argparse
 import json
 import sqlite3
 from pathlib import Path
@@ -67,4 +68,6 @@ def run(output: Path):
 
 
 if __name__ == "__main__":
-    print(json.dumps(run(Path("benchmarks/esa-day2-demo")), indent=2))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, default=Path("benchmarks/esa-day2-demo"))
+    print(json.dumps(run(parser.parse_args().output), indent=2))

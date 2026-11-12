@@ -1,5 +1,6 @@
 """Generate a local, integrity-checked forensic incident and tamper result; no AWS."""
 
+import argparse
 import json
 from copy import deepcopy
 from pathlib import Path
@@ -40,4 +41,6 @@ def run(output: Path) -> dict[str, Any]:
 
 
 if __name__ == "__main__":
-    print(json.dumps(run(Path("benchmarks/esa-forensic-redacted")), indent=2))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, default=Path("benchmarks/esa-forensic-redacted"))
+    print(json.dumps(run(parser.parse_args().output), indent=2))
