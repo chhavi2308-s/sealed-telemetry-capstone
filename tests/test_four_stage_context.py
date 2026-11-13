@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import boto3
 import pytest
+from botocore.client import BaseClient
 from botocore.exceptions import ClientError
 from test_four_stage_binding import lab as lab
 from test_four_stage_binding import request
@@ -16,7 +17,7 @@ from test_four_stage_collection import collection as collection
 from test_four_stage_collection import config, state_rows
 
 from sealed_telemetry import four_stage as demo
-from sealed_telemetry import four_stage_c4_iber, four_stage_health
+from sealed_telemetry import four_stage_c4_iber, four_stage_context, four_stage_health
 from sealed_telemetry.four_stage_c3_schema import InvalidRecord, normalize, plain
 from sealed_telemetry.four_stage_collection import CollectionError, Collector, Source
 from sealed_telemetry.schema import timestamp
@@ -39,6 +40,7 @@ def c4(collection, monkeypatch):
     monkeypatch.setenv("C4_CONTEXT_SECRET", "fixture-context")
     conf = config(collection)
     db = collection["lab"]["db"]
+    monkeypatch.setenv("ISSUANCE_TABLE_ARN", db.Table("ISSUANCE_TABLE").table_arn)
     sources = list(conf.sources)
     for role, variable, key in (
         ("gateway", "C4_GATEWAY_TABLE", "record_id"),
@@ -108,6 +110,135 @@ def health(c4, change=None):
 
 def source_rows(c4, name):
     return plain(c4["db"].Table(name).scan()["Items"])
+
+
+def test_c4_complete_flow_uses_configured_arns_without_metadata_calls(c4):
+    original = BaseClient._make_api_call
+    calls = []
+
+    def deny_metadata(client, operation, parameters):
+        calls.append(operation)
+        if operation in {"DescribeTable", "GetCallerIdentity"}:
+            raise AssertionError("C4 must not discover table identity through AWS")
+        return original(client, operation, parameters)
+
+    with (
+        patch.object(BaseClient, "_make_api_call", new=deny_metadata),
+        patch.object(four_stage_context, "normalize_c2", wraps=normalize) as checked,
+    ):
+        output = flow(c4)
+    assert output["statusCode"] == 200
+    assert "TransactWriteItems" in calls
+    assert {c.args[2] for c in checked.call_args_list} == {
+        "arn:aws:dynamodb:ap-south-1:123456789012:table/EXPECTED_TABLE",
+        "arn:aws:dynamodb:ap-south-1:123456789012:table/ISSUANCE_TABLE",
+    }
+    sidecar = next(
+        r for r in source_rows(c4, "C4_PROVIDER_TABLE") if r["record_kind"] == "provider_context"
+    )
+    assert sidecar["verified_app_invocation_id"] == c4["ids"]["app"]
+    assert sidecar["context_key_version"] == "v1"
+
+
+@pytest.mark.parametrize("variable", ["EXPECTED_TABLE_ARN", "ISSUANCE_TABLE_ARN"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        None,
+        "",
+        "table-name-only",
+        "arn:aws:dynamodb:ap-south-1:123:table/{name}",
+        "arn:aws:dynamodb:ap-south-1:123456789012:table/OTHER_TABLE",
+        "arn:aws:dynamodb:us-east-1:123456789012:table/{name}",
+        "arn:aws-cn:dynamodb:ap-south-1:123456789012:table/{name}",
+        "arn:aws-us-gov:dynamodb:ap-south-1:123456789012:table/{name}",
+        "arn:aws:dynamodb:ap-south-1:123456789012:table/{name}/index/example",
+        "arn:aws:dynamodb:ap-south-1:123456789012:table/*",
+        "arn:aws:dynamodb:ap-south-1:123456789012:table/{name}\n",
+    ],
+)
+def test_bad_source_arn_fails_before_sdk_intent_or_issuance(c4, monkeypatch, variable, value):
+    name = variable.removesuffix("_ARN")
+    if value is None:
+        monkeypatch.delenv(variable)
+    else:
+        monkeypatch.setenv(variable, value.format(name=name))
+    payload = {"action_id": str(uuid4()), "operation": demo.OPERATION, "filename": demo.FILENAME}
+    with (
+        patch.object(BaseClient, "_make_api_call", side_effect=AssertionError("no AWS operation")),
+        patch.object(demo, "call") as invoke,
+        patch.object(four_stage_context, "append") as append,
+    ):
+        result = demo.app(payload, SimpleNamespace(aws_request_id=c4["ids"]["app"]))
+    assert result == {"status": "unavailable", "error": "APPLICATION_CONTEXT_UNAVAILABLE"}
+    invoke.assert_not_called()
+    append.assert_not_called()
+    assert not source_rows(c4, "ISSUANCE_TABLE") and not source_rows(c4, "TOKEN_TABLE")
+
+
+def test_caller_cannot_override_c4_source_arn_configuration(c4):
+    def route(function, payload):
+        if function == "APP_FUNCTION":
+            return demo.app(
+                {
+                    **payload,
+                    "EXPECTED_TABLE_ARN": "caller-expected",
+                    "ISSUANCE_TABLE_ARN": "caller-issuer",
+                },
+                SimpleNamespace(aws_request_id=c4["ids"]["app"]),
+            )
+        if function == "ISSUER_FUNCTION":
+            return demo.issuer(payload, None)
+        return demo.saas(payload, SimpleNamespace(aws_request_id=c4["ids"]["provider"]))
+
+    with (
+        patch.object(demo, "call", side_effect=route),
+        patch.object(four_stage_context, "normalize_c2", wraps=normalize) as checked,
+    ):
+        assert (
+            demo.authorization(request(), SimpleNamespace(aws_request_id=c4["ids"]["gateway"]))[
+                "statusCode"
+            ]
+            == 200
+        )
+    assert all(
+        c.args[2].startswith("arn:aws:dynamodb:ap-south-1:123456789012:table/")
+        for c in checked.call_args_list
+    )
+
+
+@pytest.mark.parametrize("evidence_mode", ["legacy", "c2"])
+def test_context_disabled_app_does_not_require_new_source_arns(monkeypatch, evidence_mode):
+    monkeypatch.setenv("FOUR_STAGE_EVIDENCE_MODE", evidence_mode)
+    monkeypatch.setenv("FOUR_STAGE_CONTEXT_MODE", "disabled")
+    monkeypatch.delenv("EXPECTED_TABLE_ARN", raising=False)
+    monkeypatch.delenv("ISSUANCE_TABLE_ARN", raising=False)
+    event = {"action_id": str(uuid4()), "operation": demo.OPERATION, "filename": demo.FILENAME}
+    with (
+        patch.object(
+            four_stage_context, "configured_table_arn", side_effect=AssertionError("C4 off")
+        ),
+        patch.object(demo, "emit_intent"),
+        patch.object(
+            demo,
+            "call",
+            side_effect=[
+                {
+                    "access_token": "public-synthetic-fixture",
+                    "evidence_contract": "four-stage-issuance-envelope-2",
+                },
+                {
+                    "status": "success",
+                    "provider_request_id": "fixture-receipt",
+                    "evidence_contract": "four-stage-provider-2",
+                },
+            ],
+        ),
+    ):
+        assert demo.app(event, SimpleNamespace(aws_request_id=str(uuid4()))) == {
+            "status": "success",
+            "provider_request_id": "fixture-receipt",
+        }
 
 
 def test_real_runtime_identities_are_distinct_and_complete_evidence_enters_unchanged_iber(c4):

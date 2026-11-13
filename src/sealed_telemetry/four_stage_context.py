@@ -19,6 +19,9 @@ from sealed_telemetry.four_stage_evidence import epoch
 from sealed_telemetry.schema import canonical, digest, timestamp
 
 VERSION = "four-stage-context-4"
+SOURCE_TABLE_ARN = re.compile(
+    r"arn:(aws|aws-cn|aws-us-gov):dynamodb:([a-z0-9-]+):([0-9]{12}):table/([A-Za-z0-9_.-]{3,255})\Z"
+)
 
 
 def context_keys() -> tuple[str, dict[str, bytes]]:
@@ -68,6 +71,22 @@ def database() -> Any:
 
 def table(db: Any, variable: str) -> Any:
     return db.Table(os.environ[variable])
+
+
+def configured_table_arn(db: Any, variable: str) -> str:
+    """Validate deployment-owned source identity without loading table metadata."""
+    value = os.environ.get(variable + "_ARN")
+    match = SOURCE_TABLE_ARN.fullmatch(value) if isinstance(value, str) else None
+    source = table(db, variable)
+    if (
+        match is None
+        or match.group(1) != source.meta.client.meta.partition
+        or match.group(2) != source.meta.client.meta.region_name
+        or match.group(4) != source.name
+    ):
+        raise ValueError("INVALID_SOURCE_TABLE_CONFIGURATION")
+    assert isinstance(value, str)
+    return value
 
 
 def read(db: Any, variable: str, key: dict[str, str]) -> dict[str, Any]:
@@ -150,8 +169,11 @@ def application(event: dict[str, Any], context: Any) -> dict[str, Any]:
     try:
         db, app_id = database(), invocation(context)
         action = uuid(event.get("action_id"))
+        # Validate both locators before any read, intent write or issuer call.
+        expected_arn = configured_table_arn(db, "EXPECTED_TABLE")
+        issuance_arn = configured_table_arn(db, "ISSUANCE_TABLE")
         expected = read(db, "EXPECTED_TABLE", {"action_id": action})
-        normalize_c2("gateway", "c2", table(db, "EXPECTED_TABLE").table_arn, action, expected)
+        normalize_c2("gateway", "c2", expected_arn, action, expected)
         gateway = read(db, "C4_GATEWAY_TABLE", {"record_id": "authorization:" + action})
         if (
             gateway["authorization_hash"] != expected["authorization_hash"]
@@ -183,9 +205,7 @@ def application(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # Independently read issuer-owned evidence; never accept a caller's fingerprint.
         claim = read(db, "ISSUANCE_TABLE", {"issuance_id": "authorization:" + action})
         issuance = read(db, "ISSUANCE_TABLE", {"issuance_id": claim["recorded_issuance_id"]})
-        normalize_c2(
-            "issuer", "c2", table(db, "ISSUANCE_TABLE").table_arn, issuance["issuance_id"], issuance
-        )
+        normalize_c2("issuer", "c2", issuance_arn, issuance["issuance_id"], issuance)
         att = issuance["attestation"]
         if (
             att["action_id"] != action

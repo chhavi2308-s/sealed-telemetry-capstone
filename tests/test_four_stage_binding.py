@@ -44,6 +44,7 @@ def lab(monkeypatch):
                 AttributeDefinitions=[{"AttributeName": key, "AttributeType": "S"}],
                 KeySchema=[{"AttributeName": key, "KeyType": "HASH"}],
             )
+        monkeypatch.setenv("EXPECTED_TABLE_ARN", db.Table("EXPECTED_TABLE").table_arn)
         secrets = boto3.client("secretsmanager", region_name="ap-south-1")
         identity = {
             "key_version": "v1",
@@ -124,6 +125,73 @@ def test_atomic_issuance_links_private_registry_and_redacted_issuer_record(lab):
     assert reference["canonical_hash"] == expected["authorization_hash"]
     assert reference["native_id"] == payload["action_id"]
     assert reference["table_arn"] == lab["db"].Table("EXPECTED_TABLE").table_arn
+
+
+def test_issuance_never_describes_tables_or_resolves_caller_identity(lab):
+    payload = authorize(lab)
+    original = BaseClient._make_api_call
+    calls = []
+
+    def deny_metadata(client, operation, parameters):
+        calls.append(operation)
+        if operation in {"DescribeTable", "GetCallerIdentity"}:
+            raise AssertionError("issuance must not resolve source metadata through AWS")
+        return original(client, operation, parameters)
+
+    with patch.object(BaseClient, "_make_api_call", new=deny_metadata):
+        credential = demo.issuer(payload, None)
+    assert "access_token" in credential
+    assert "TransactWriteItems" in calls
+    issued = next(r for r in rows(lab, "ISSUANCE_TABLE") if r["record_kind"] == "issuance_evidence")
+    assert issued["authorization_reference"]["table_arn"] == (
+        "arn:aws:dynamodb:ap-south-1:123456789012:table/EXPECTED_TABLE"
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        None,
+        "",
+        "EXPECTED_TABLE",
+        "arn:aws:dynamodb:ap-south-1:123:table/EXPECTED_TABLE",
+        "arn:aws:dynamodb:ap-south-1:123456789012:table/OTHER_TABLE",
+        "arn:aws:dynamodb:us-east-1:123456789012:table/EXPECTED_TABLE",
+        "arn:aws-cn:dynamodb:ap-south-1:123456789012:table/EXPECTED_TABLE",
+        "arn:aws-us-gov:dynamodb:ap-south-1:123456789012:table/EXPECTED_TABLE",
+        "arn:aws:dynamodb:ap-south-1:123456789012:table/EXPECTED_TABLE/index/example",
+        "arn:aws:dynamodb:ap-south-1:123456789012:table/EXPECTED_TABLE\n",
+        "arn:aws:dynamodb:ap-south-1:123456789012:table/*",
+    ],
+)
+def test_invalid_configured_authorization_arn_fails_before_aws_or_minting(lab, monkeypatch, value):
+    payload = authorize(lab)
+    if value is None:
+        monkeypatch.delenv("EXPECTED_TABLE_ARN")
+    else:
+        monkeypatch.setenv("EXPECTED_TABLE_ARN", value)
+    with (
+        patch.object(BaseClient, "_make_api_call", side_effect=AssertionError("no AWS operation")),
+        patch.object(binding.secrets, "token_urlsafe") as mint,
+        patch.object(binding, "uuid4") as private_identity,
+    ):
+        assert demo.issuer(payload, None) == {"error": "invalid_table_configuration"}
+    mint.assert_not_called()
+    private_identity.assert_not_called()
+    assert not rows(lab, "TOKEN_TABLE") and not rows(lab, "ISSUANCE_TABLE")
+
+
+def test_caller_cannot_override_configured_authorization_arn(lab):
+    payload = {
+        **authorize(lab),
+        "EXPECTED_TABLE_ARN": "arn:aws:dynamodb:ap-south-1:000000000000:table/OTHER_TABLE",
+        "authorization_reference": {"table_arn": "caller-supplied"},
+    }
+    assert "access_token" in demo.issuer(payload, None)
+    issued = next(r for r in rows(lab, "ISSUANCE_TABLE") if r["record_kind"] == "issuance_evidence")
+    assert issued["authorization_reference"]["table_arn"].endswith(
+        ":123456789012:table/EXPECTED_TABLE"
+    )
 
 
 def test_provider_uses_own_bearer_lookup_and_preserves_distinct_replay_receipts(lab):

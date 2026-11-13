@@ -35,6 +35,9 @@ ISSUANCE_VERSION = "four-stage-issuance-envelope-2"
 PROVIDER_VERSION = "four-stage-provider-2"
 TX_CONFIG = Config(retries={"total_max_attempts": 1}, connect_timeout=2, read_timeout=10)
 UNCERTAINTY = "Credential binding does not establish application execution or attacker identity."
+TABLE_ARN_PATTERN = re.compile(
+    r"arn:(aws|aws-cn|aws-us-gov):dynamodb:([a-z0-9-]+):([0-9]{12}):table/([A-Za-z0-9_.-]{3,255})\Z"
+)
 
 
 class EvidenceError(ValueError):
@@ -115,6 +118,23 @@ def _credential_key() -> tuple[str, bytes]:
         return version, _key(value["keys"][version])
     except (KeyError, ValueError, TypeError):
         raise EvidenceError("evidence_configuration_unavailable") from None
+
+
+def _authorization_table_arn(expected_table: Any) -> str:
+    """Use deployment-owned source identity; never load DynamoDB resource metadata."""
+    value = os.environ.get("EXPECTED_TABLE_ARN")
+    match = TABLE_ARN_PATTERN.fullmatch(value) if isinstance(value, str) else None
+    if (
+        match is None
+        or match.group(1) != expected_table.meta.client.meta.partition
+        or match.group(2) != expected_table.meta.client.meta.region_name
+        or match.group(4) != expected_table.name
+    ):
+        raise EvidenceError("invalid_table_configuration")
+    # Account/partition provenance comes from the deployed ExpectedActions.Arn,
+    # independently checked by collector configuration, not from invocation data.
+    assert isinstance(value, str)
+    return value
 
 
 def prepare_authorization(
@@ -280,6 +300,7 @@ def issue(event: dict[str, Any], now: int) -> dict[str, Any]:
             raise EvidenceError("not_authorized")
         db = boto3.resource("dynamodb", config=TX_CONFIG)
         expected_table = db.Table(os.environ["EXPECTED_TABLE"])
+        authorization_table_arn = _authorization_table_arn(expected_table)
         raw = expected_table.get_item(Key={"action_id": action_id}, ConsistentRead=True).get("Item")
         if not raw:
             raise EvidenceError("not_authorized")
@@ -323,7 +344,7 @@ def issue(event: dict[str, Any], now: int) -> dict[str, Any]:
         if not verify_attestation_fingerprint(attestation, keyring={version: key}):
             raise EvidenceError("invalid_issuance_binding")
         reference = {
-            "table_arn": expected_table.table_arn,
+            "table_arn": authorization_table_arn,
             "native_id": action_id,
             "revision": snapshot["authorization_revision"],
             "canonical_hash": content_hash,
