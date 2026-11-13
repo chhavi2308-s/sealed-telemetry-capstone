@@ -1,0 +1,491 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  Version-controlled four-stage synthetic upload plus C2 issuance and C4 context
+  evidence scaffold. Private observers are provisioned without automatic scheduling.
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+  com.aws.cloudformation.Context:
+    arch: IAM-protected API -> four producer Lambdas -> retained evidence tables; private collector and monitor.
+    must:
+      - Legacy API behavior and producer logical IDs remain stable.
+      - C2/C4 producer grants and modes default disabled.
+      - Secrets are identifiers only; values never enter this template.
+      - Observer invocation is private and unscheduled.
+Parameters:
+  Owner:
+    Type: String
+    MinLength: 1
+  ExpiresOn:
+    Type: String
+    AllowedPattern: '[0-9]{4}-[0-9]{2}-[0-9]{2}'
+  IntegrationArtifactBucket:
+    Type: String
+    MinLength: 3
+  IntegrationArtifactKey:
+    Type: String
+    MinLength: 1
+  IntegrationArtifactVersion:
+    Type: String
+    MinLength: 1
+  IdentitySecretArn:
+    Type: String
+    AllowedPattern: '^arn:[^:]+:secretsmanager:[^:]+:[0-9]{12}:secret:.+$'
+  CredentialSecretArn:
+    Type: String
+    AllowedPattern: '^arn:[^:]+:secretsmanager:[^:]+:[0-9]{12}:secret:.+$'
+  ContextSecretArn:
+    Type: String
+    AllowedPattern: '^arn:[^:]+:secretsmanager:[^:]+:[0-9]{12}:secret:.+$'
+  C4CollectorBoundaryArn:
+    Type: String
+    AllowedPattern: '^arn:[^:]+:iam::[0-9]{12}:policy/.+$'
+  C4MonitorBoundaryArn:
+    Type: String
+    AllowedPattern: '^arn:[^:]+:iam::[0-9]{12}:policy/.+$'
+  EvidenceMode:
+    Type: String
+    Default: legacy
+    AllowedValues: [legacy, c2]
+  ContextMode:
+    Type: String
+    Default: disabled
+    AllowedValues: [disabled, c4]
+  GrantProducerEvidencePermissions:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['false', 'true']
+Conditions:
+  GrantProducerPermissions: !Equals [!Ref GrantProducerEvidencePermissions, 'true']
+Rules:
+  ContextModeRequiresC2:
+    RuleCondition: !Equals [!Ref ContextMode, c4]
+    Assertions:
+      - Assert: !Equals [!Ref EvidenceMode, c2]
+        AssertDescription: ContextMode c4 requires EvidenceMode c2.
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures: [x86_64]
+    MemorySize: 128
+    Timeout: 25
+    CodeUri:
+      Bucket: !Ref IntegrationArtifactBucket
+      Key: !Ref IntegrationArtifactKey
+      Version: !Ref IntegrationArtifactVersion
+    Tags:
+      Project: SealedTelemetryFourStage
+      Owner: !Ref Owner
+      ExpiresOn: !Ref ExpiresOn
+Resources:
+  UploadApi:
+    Type: AWS::Serverless::HttpApi
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Existing IAM-authenticated demo entry point; no observer routes are attached.
+        must: [Keep AWS_IAM authorization and /upload POST behavior.]
+    Properties:
+      StageName: demo
+      Auth: {EnableIamAuthorizer: true, DefaultAuthorizer: AWS_IAM}
+      DefaultRouteSettings: {ThrottlingBurstLimit: 2, ThrottlingRateLimit: 1}
+      AccessLogSettings:
+        DestinationArn: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${UploadApiAccessLogs}'
+        Format: 'requestId=$context.requestId routeKey=$context.routeKey status=$context.status integrationStatus=$context.integration.integrationStatus integrationLatencyMs=$context.integration.latency integrationError=$context.integration.error'
+      Tags: {Project: SealedTelemetryFourStage, Owner: !Ref Owner, ExpiresOn: !Ref ExpiresOn}
+  ExpectedActions:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions: [{AttributeName: action_id, AttributeType: S}]
+      KeySchema: [{AttributeName: action_id, KeyType: HASH}]
+      SSESpecification: {SSEEnabled: false}
+      TimeToLiveSpecification: {AttributeName: expires_at, Enabled: true}
+      Tags:
+        - {Key: Project, Value: SealedTelemetryFourStage}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+  OAuthTokens:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions: [{AttributeName: token_hash, AttributeType: S}]
+      KeySchema: [{AttributeName: token_hash, KeyType: HASH}]
+      SSESpecification: {SSEEnabled: false}
+      TimeToLiveSpecification: {AttributeName: expires_at, Enabled: true}
+      Tags:
+        - {Key: Project, Value: SealedTelemetryFourStage}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+  SaasAudit:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions: [{AttributeName: provider_request_id, AttributeType: S}]
+      KeySchema: [{AttributeName: provider_request_id, KeyType: HASH}]
+      SSESpecification: {SSEEnabled: false}
+      TimeToLiveSpecification: {AttributeName: expires_at, Enabled: true}
+      Tags:
+        - {Key: Project, Value: SealedTelemetryFourStage}
+        - {Key: Owner, Value: !Ref Owner}
+        - {Key: ExpiresOn, Value: !Ref ExpiresOn}
+  AuthorizationLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: {LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-authorization', RetentionInDays: 7}
+  ApplicationLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: {LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-application', RetentionInDays: 7}
+  IssuerLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: {LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-issuer', RetentionInDays: 7}
+  SaasLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: {LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-saas', RetentionInDays: 7}
+  UploadApiAccessLogs:
+    Type: AWS::Logs::LogGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: API-owned request metadata supports correlation without request-body capture.
+        must: [Keep access log format free of credentials and request payloads.]
+    Properties: {LogGroupName: !Sub '/aws/apigateway/${AWS::StackName}-demo', RetentionInDays: 7}
+  AuthorizationRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AssumeRolePolicyDocument: &lambdaTrust {Version: '2012-10-17', Statement: [{Effect: Allow, Principal: {Service: lambda.amazonaws.com}, Action: 'sts:AssumeRole'}]}
+      PermissionsBoundary: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/st-four-stage-authorization-boundary'
+      Policies:
+        - PolicyName: FourStageOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - {Effect: Allow, Action: [dynamodb:PutItem], Resource: !GetAtt ExpectedActions.Arn}
+              - {Effect: Allow, Action: [lambda:InvokeFunction], Resource: !GetAtt ApplicationFunction.Arn}
+              - {Effect: Allow, Action: [logs:CreateLogStream, logs:PutLogEvents], Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-authorization:*'}
+        - !If
+          - GrantProducerPermissions
+          - PolicyName: C2C4EvidenceOnly
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - {Effect: Allow, Action: [dynamodb:PutItem], Resource: !GetAtt C4GatewayContext.Arn}
+                - {Effect: Allow, Action: [secretsmanager:GetSecretValue], Resource: !Ref IdentitySecretArn}
+                - Effect: Allow
+                  Action: [kms:Decrypt]
+                  Resource: '*'
+                  Condition:
+                    StringEquals:
+                      kms:ViaService: !Sub 'secretsmanager.${AWS::Region}.${AWS::URLSuffix}'
+                      kms:EncryptionContext:SecretARN: !Ref IdentitySecretArn
+          - !Ref AWS::NoValue
+  ApplicationRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AssumeRolePolicyDocument: *lambdaTrust
+      PermissionsBoundary: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/st-four-stage-application-boundary'
+      Policies:
+        - PolicyName: FourStageOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - {Effect: Allow, Action: [lambda:InvokeFunction], Resource: [!GetAtt IssuerFunction.Arn, !GetAtt SaasFunction.Arn]}
+              - {Effect: Allow, Action: [logs:CreateLogStream, logs:PutLogEvents], Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-application:*'}
+        - !If
+          - GrantProducerPermissions
+          - PolicyName: C2C4EvidenceOnly
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - {Effect: Allow, Action: [dynamodb:GetItem], Resource: [!GetAtt ExpectedActions.Arn, !GetAtt IssuanceEvidence.Arn, !GetAtt C4GatewayContext.Arn]}
+                - {Effect: Allow, Action: [dynamodb:PutItem], Resource: !GetAtt C4ApplicationContext.Arn}
+                - {Effect: Allow, Action: [secretsmanager:GetSecretValue], Resource: !Ref ContextSecretArn}
+                - Effect: Allow
+                  Action: [kms:Decrypt]
+                  Resource: '*'
+                  Condition:
+                    StringEquals:
+                      kms:ViaService: !Sub 'secretsmanager.${AWS::Region}.${AWS::URLSuffix}'
+                      kms:EncryptionContext:SecretARN: !Ref ContextSecretArn
+          - !Ref AWS::NoValue
+  IssuerRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AssumeRolePolicyDocument: *lambdaTrust
+      PermissionsBoundary: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/st-four-stage-issuer-boundary'
+      Policies:
+        - PolicyName: FourStageOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - {Effect: Allow, Action: [dynamodb:GetItem], Resource: !GetAtt ExpectedActions.Arn}
+              - {Effect: Allow, Action: [dynamodb:PutItem], Resource: !GetAtt OAuthTokens.Arn}
+              - {Effect: Allow, Action: [logs:CreateLogStream, logs:PutLogEvents], Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-issuer:*'}
+        - !If
+          - GrantProducerPermissions
+          - PolicyName: C2C4EvidenceOnly
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - {Effect: Allow, Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:ConditionCheckItem, dynamodb:TransactWriteItems], Resource: [!GetAtt ExpectedActions.Arn, !GetAtt OAuthTokens.Arn, !GetAtt IssuanceEvidence.Arn]}
+                - {Effect: Allow, Action: [secretsmanager:GetSecretValue], Resource: [!Ref IdentitySecretArn, !Ref CredentialSecretArn]}
+                - Effect: Allow
+                  Action: [kms:Decrypt]
+                  Resource: '*'
+                  Condition:
+                    StringEquals:
+                      kms:ViaService: !Sub 'secretsmanager.${AWS::Region}.${AWS::URLSuffix}'
+                    ForAnyValue:StringEquals:
+                      kms:EncryptionContext:SecretARN: [!Ref IdentitySecretArn, !Ref CredentialSecretArn]
+          - !Ref AWS::NoValue
+  SaasRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AssumeRolePolicyDocument: *lambdaTrust
+      PermissionsBoundary: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/st-four-stage-saas-boundary'
+      Policies:
+        - PolicyName: FourStageOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - {Effect: Allow, Action: [dynamodb:GetItem], Resource: !GetAtt OAuthTokens.Arn}
+              - {Effect: Allow, Action: [dynamodb:PutItem], Resource: !GetAtt SaasAudit.Arn}
+              - {Effect: Allow, Action: [logs:CreateLogStream, logs:PutLogEvents], Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-saas:*'}
+        - !If
+          - GrantProducerPermissions
+          - PolicyName: C2C4EvidenceOnly
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - {Effect: Allow, Action: [dynamodb:GetItem], Resource: [!GetAtt SaasAudit.Arn, !GetAtt C4ApplicationContext.Arn]}
+                - {Effect: Allow, Action: [dynamodb:PutItem], Resource: !GetAtt C4ProviderContext.Arn}
+                - {Effect: Allow, Action: [secretsmanager:GetSecretValue], Resource: !Ref ContextSecretArn}
+                - Effect: Allow
+                  Action: [kms:Decrypt]
+                  Resource: '*'
+                  Condition:
+                    StringEquals:
+                      kms:ViaService: !Sub 'secretsmanager.${AWS::Region}.${AWS::URLSuffix}'
+                      kms:EncryptionContext:SecretARN: !Ref ContextSecretArn
+          - !Ref AWS::NoValue
+  AuthorizationFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: AuthorizationLogs
+    Properties:
+      Handler: sealed_telemetry.four_stage.authorization
+      FunctionName: !Sub '${AWS::StackName}-authorization'
+      Role: !GetAtt AuthorizationRole.Arn
+      Environment: {Variables: {EXPECTED_TABLE: !Ref ExpectedActions, APP_FUNCTION: !Ref ApplicationFunction, FOUR_STAGE_EVIDENCE_MODE: !Ref EvidenceMode, FOUR_STAGE_CONTEXT_MODE: !Ref ContextMode, C4_GATEWAY_TABLE: !Ref C4GatewayContext, FOUR_STAGE_IDENTITY_SECRET: !Ref IdentitySecretArn}}
+      Events: {Upload: {Type: HttpApi, Properties: {ApiId: !Ref UploadApi, Path: /upload, Method: POST, PayloadFormatVersion: '2.0'}}}
+  ApplicationFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: ApplicationLogs
+    Properties:
+      Handler: sealed_telemetry.four_stage.app
+      FunctionName: !Sub '${AWS::StackName}-application'
+      Role: !GetAtt ApplicationRole.Arn
+      Environment:
+        Variables:
+          ISSUER_FUNCTION: !Ref IssuerFunction
+          SAAS_FUNCTION: !Ref SaasFunction
+          EXPECTED_TABLE: !Ref ExpectedActions
+          ISSUANCE_TABLE: !Ref IssuanceEvidence
+          C4_GATEWAY_TABLE: !Ref C4GatewayContext
+          C4_APP_TABLE: !Ref C4ApplicationContext
+          C4_CONTEXT_SECRET: !Ref ContextSecretArn
+          EXPECTED_TABLE_ARN: !GetAtt ExpectedActions.Arn
+          ISSUANCE_TABLE_ARN: !GetAtt IssuanceEvidence.Arn
+          FOUR_STAGE_EVIDENCE_MODE: !Ref EvidenceMode
+          FOUR_STAGE_CONTEXT_MODE: !Ref ContextMode
+  IssuerFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: IssuerLogs
+    Properties:
+      Handler: sealed_telemetry.four_stage.issuer
+      FunctionName: !Sub '${AWS::StackName}-issuer'
+      Role: !GetAtt IssuerRole.Arn
+      Environment:
+        Variables:
+          EXPECTED_TABLE: !Ref ExpectedActions
+          TOKEN_TABLE: !Ref OAuthTokens
+          ISSUANCE_TABLE: !Ref IssuanceEvidence
+          EXPECTED_TABLE_ARN: !GetAtt ExpectedActions.Arn
+          FOUR_STAGE_IDENTITY_SECRET: !Ref IdentitySecretArn
+          FOUR_STAGE_CREDENTIAL_SECRET: !Ref CredentialSecretArn
+          FOUR_STAGE_EVIDENCE_MODE: !Ref EvidenceMode
+          FOUR_STAGE_CONTEXT_MODE: !Ref ContextMode
+  SaasFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: SaasLogs
+    Properties:
+      Handler: sealed_telemetry.four_stage.saas
+      FunctionName: !Sub '${AWS::StackName}-saas'
+      Role: !GetAtt SaasRole.Arn
+      Environment:
+        Variables:
+          TOKEN_TABLE: !Ref OAuthTokens
+          AUDIT_TABLE: !Ref SaasAudit
+          C4_APP_TABLE: !Ref C4ApplicationContext
+          C4_PROVIDER_TABLE: !Ref C4ProviderContext
+          C4_CONTEXT_SECRET: !Ref ContextSecretArn
+          FOUR_STAGE_EVIDENCE_MODE: !Ref EvidenceMode
+          FOUR_STAGE_CONTEXT_MODE: !Ref ContextMode
+  IssuanceEvidence:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata: {com.aws.cloudformation.Context: {why: Redacted issuer evidence; retained for later collection, must: [SSE enabled; issuer-only writes.]}}
+    Properties:
+      TableName: !Sub '${AWS::StackName}-IssuanceEvidence'
+      BillingMode: PAY_PER_REQUEST
+      DeletionProtectionEnabled: true
+      AttributeDefinitions: [{AttributeName: issuance_id, AttributeType: S}]
+      KeySchema: [{AttributeName: issuance_id, KeyType: HASH}]
+      SSESpecification: {SSEEnabled: true}
+      Tags: [{Key: Project, Value: SealedTelemetryFourStage}, {Key: Owner, Value: !Ref Owner}, {Key: ExpiresOn, Value: !Ref ExpiresOn}]
+  C4GatewayContext:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub '${AWS::StackName}-C4GatewayContext'
+      BillingMode: PAY_PER_REQUEST
+      DeletionProtectionEnabled: true
+      AttributeDefinitions: [{AttributeName: record_id, AttributeType: S}]
+      KeySchema: [{AttributeName: record_id, KeyType: HASH}]
+      SSESpecification: {SSEEnabled: true}
+      Tags: [{Key: Project, Value: SealedTelemetryFourStage}, {Key: Owner, Value: !Ref Owner}, {Key: ExpiresOn, Value: !Ref ExpiresOn}]
+  C4ApplicationContext:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub '${AWS::StackName}-C4ApplicationContext'
+      BillingMode: PAY_PER_REQUEST
+      DeletionProtectionEnabled: true
+      AttributeDefinitions: [{AttributeName: record_id, AttributeType: S}]
+      KeySchema: [{AttributeName: record_id, KeyType: HASH}]
+      SSESpecification: {SSEEnabled: true}
+      Tags: [{Key: Project, Value: SealedTelemetryFourStage}, {Key: Owner, Value: !Ref Owner}, {Key: ExpiresOn, Value: !Ref ExpiresOn}]
+  C4ProviderContext:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub '${AWS::StackName}-C4ProviderContext'
+      BillingMode: PAY_PER_REQUEST
+      DeletionProtectionEnabled: true
+      AttributeDefinitions: [{AttributeName: provider_request_id, AttributeType: S}]
+      KeySchema: [{AttributeName: provider_request_id, KeyType: HASH}]
+      SSESpecification: {SSEEnabled: true}
+      Tags: [{Key: Project, Value: SealedTelemetryFourStage}, {Key: Owner, Value: !Ref Owner}, {Key: ExpiresOn, Value: !Ref ExpiresOn}]
+  C4IndependentHealth:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub '${AWS::StackName}-C4IndependentHealth'
+      BillingMode: PAY_PER_REQUEST
+      DeletionProtectionEnabled: true
+      AttributeDefinitions: [{AttributeName: event_id, AttributeType: S}]
+      KeySchema: [{AttributeName: event_id, KeyType: HASH}]
+      SSESpecification: {SSEEnabled: true}
+      Tags: [{Key: Project, Value: SealedTelemetryFourStage}, {Key: Owner, Value: !Ref Owner}, {Key: ExpiresOn, Value: !Ref ExpiresOn}]
+  C4EvidenceState:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata: {com.aws.cloudformation.Context: {why: Collector-private dedupe/quarantine/control ledger, must: [No TTL; retained history is evidence.]}}
+    Properties:
+      TableName: !Sub '${AWS::StackName}-C4EvidenceState'
+      BillingMode: PAY_PER_REQUEST
+      DeletionProtectionEnabled: true
+      AttributeDefinitions: [{AttributeName: record_id, AttributeType: S}]
+      KeySchema: [{AttributeName: record_id, KeyType: HASH}]
+      SSESpecification: {SSEEnabled: true}
+      Tags: [{Key: Project, Value: SealedTelemetryFourStage}, {Key: Owner, Value: !Ref Owner}, {Key: ExpiresOn, Value: !Ref ExpiresOn}]
+  C4CollectorLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: {LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-c4-collector', RetentionInDays: 14}
+  C4MonitorLogs:
+    Type: AWS::Logs::LogGroup
+    Properties: {LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-c4-monitor', RetentionInDays: 14}
+  C4CollectorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-c4-collector-role'
+      Tags: [{Key: Project, Value: SealedTelemetryFourStage}, {Key: Owner, Value: !Ref Owner}, {Key: ExpiresOn, Value: !Ref ExpiresOn}]
+      AssumeRolePolicyDocument: *lambdaTrust
+      PermissionsBoundary: !Ref C4CollectorBoundaryArn
+      Policies:
+        - PolicyName: C4CollectorOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - {Effect: Allow, Action: [dynamodb:DescribeTable, dynamodb:Scan], Resource: [!GetAtt ExpectedActions.Arn, !GetAtt IssuanceEvidence.Arn, !GetAtt SaasAudit.Arn, !GetAtt C4GatewayContext.Arn, !GetAtt C4ApplicationContext.Arn, !GetAtt C4ProviderContext.Arn, !GetAtt C4IndependentHealth.Arn]}
+              - {Effect: Allow, Action: [dynamodb:DescribeTable, dynamodb:Scan, dynamodb:GetItem, dynamodb:PutItem, dynamodb:ConditionCheckItem, dynamodb:TransactWriteItems], Resource: !GetAtt C4EvidenceState.Arn}
+              - {Effect: Allow, Action: [iam:GetRole], Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AWS::StackName}-c4-collector-role'}
+              - {Effect: Allow, Action: [logs:CreateLogStream, logs:PutLogEvents], Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-c4-collector:*'}
+  C4MonitorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-c4-monitor-role'
+      Tags: [{Key: Project, Value: SealedTelemetryFourStage}, {Key: Owner, Value: !Ref Owner}, {Key: ExpiresOn, Value: !Ref ExpiresOn}]
+      AssumeRolePolicyDocument: *lambdaTrust
+      PermissionsBoundary: !Ref C4MonitorBoundaryArn
+      Policies:
+        - PolicyName: C4MonitorOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - {Effect: Allow, Action: [lambda:GetFunctionConfiguration], Resource: [!GetAtt AuthorizationFunction.Arn, !GetAtt ApplicationFunction.Arn, !GetAtt SaasFunction.Arn, !GetAtt C4CollectorFunction.Arn]}
+              - {Effect: Allow, Action: [cloudwatch:GetMetricStatistics], Resource: '*'}
+              - {Effect: Allow, Action: [dynamodb:PutItem], Resource: !GetAtt C4IndependentHealth.Arn}
+              - {Effect: Allow, Action: [logs:CreateLogStream, logs:PutLogEvents], Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-c4-monitor:*'}
+  C4CollectorFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: C4CollectorLogs
+    Properties:
+      Handler: sealed_telemetry.four_stage_collection.handler
+      FunctionName: !Sub '${AWS::StackName}-c4-collector'
+      Role: !GetAtt C4CollectorRole.Arn
+      ReservedConcurrentExecutions: 1
+      Environment:
+        Variables:
+          C3_COLLECTION_CONFIG: !Sub
+            - >-
+              {"collector_role_arn":"${CollectorRole}","state_table_arn":"${StateTable}","max_records":1000,"max_pages":20,"sources":[{"source_id":"gateway","contract":"c2","table_arn":"${Expected}","key":"action_id"},{"source_id":"issuer","contract":"c2","table_arn":"${Issuance}","key":"issuance_id"},{"source_id":"provider","contract":"c2","table_arn":"${Audit}","key":"provider_request_id"},{"source_id":"gateway","contract":"c4","table_arn":"${Gateway}","key":"record_id"},{"source_id":"app","contract":"c4","table_arn":"${App}","key":"record_id"},{"source_id":"provider","contract":"c4","table_arn":"${Provider}","key":"provider_request_id"},{"source_id":"health","contract":"c4","table_arn":"${Health}","key":"event_id"}],"health_functions":[["gateway","${Authorization}"],["app","${Application}"],["provider","${Saas}"],["collector","${Collector}"]]}
+            - {CollectorRole: !GetAtt C4CollectorRole.Arn, StateTable: !GetAtt C4EvidenceState.Arn, Expected: !GetAtt ExpectedActions.Arn, Issuance: !GetAtt IssuanceEvidence.Arn, Audit: !GetAtt SaasAudit.Arn, Gateway: !GetAtt C4GatewayContext.Arn, App: !GetAtt C4ApplicationContext.Arn, Provider: !GetAtt C4ProviderContext.Arn, Health: !GetAtt C4IndependentHealth.Arn, Authorization: !GetAtt AuthorizationFunction.Arn, Application: !GetAtt ApplicationFunction.Arn, Saas: !GetAtt SaasFunction.Arn, Collector: !GetAtt C4CollectorFunction.Arn}
+  C4MonitorFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: C4MonitorLogs
+    Properties:
+      Handler: sealed_telemetry.four_stage_health.handler
+      FunctionName: !Sub '${AWS::StackName}-c4-monitor'
+      Role: !GetAtt C4MonitorRole.Arn
+      ReservedConcurrentExecutions: 1
+      Environment:
+        Variables:
+          C4_HEALTH_TABLE: !Ref C4IndependentHealth
+          C4_HEALTH_FUNCTIONS: !Sub
+            - '{"gateway":"${Authorization}","app":"${Application}","provider":"${Saas}","collector":"${Collector}"}'
+            - {Authorization: !GetAtt AuthorizationFunction.Arn, Application: !GetAtt ApplicationFunction.Arn, Saas: !GetAtt SaasFunction.Arn, Collector: !GetAtt C4CollectorFunction.Arn}
+Outputs:
+  UploadUrl:
+    Description: IAM-authenticated synthetic upload URL.
+    Value: !Sub 'https://${UploadApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/demo/upload'
+  InvokeArn:
+    Description: IAM invoke ARN for the existing upload route.
+    Value: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${UploadApi}/demo/POST/upload'
