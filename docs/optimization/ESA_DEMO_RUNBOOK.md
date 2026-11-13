@@ -20,6 +20,7 @@ $env:PYTHONPATH='src;.'
 ..\test-env\Scripts\python.exe -m sealed_telemetry.study --output benchmarks\esa-phase-remaining\evaluation --trials 5
 ..\test-env\Scripts\python.exe scripts\esa_expanded_unrelated_leases.py --output benchmarks\esa-phase-remaining\unrelated-leases
 ..\test-env\Scripts\python.exe scripts\esa_forensic_demo.py --output benchmarks\esa-phase-remaining\forensic
+..\test-env\Scripts\python.exe scripts\benchmark_phase45.py --output benchmarks\esa-phase-remaining\phase45 --repeats 5
 ```
 
 ## 1. Indexed temporal benchmark
@@ -120,12 +121,25 @@ $env:PYTHONPATH='src'
 git diff --check
 ```
 
-Recorded follow-on validation: 385 tests passed in complete non-overlapping
-batches; strict mypy passed over 36 source files; Ruff, format and whitespace
-passed. The cfn-lint Python API found zero findings in the five unchanged
+Current certified release validation (`20261113-212031`): 397 collected and
+attempted tests passed, with zero failures, errors, skips, xfails,
+interruptions, or nonzero-exit batches. The recorded source fingerprint is
+`90F867EEAC45C5707B52DE55DF99500CC46024DC16C55567FDCA06F093FFE62D`.
+Strict mypy, Ruff, format, and whitespace passed. The cfn-lint Python API found zero findings in the five unchanged
 infrastructure templates for `ap-south-1`. CloudFormation Guard remains
 deferred by owner decision and did not run. The SAM CLI was unavailable, so
 SAM-specific validation did not run.
+
+## 5a. Phase 4/5 paired diagnostics benchmark
+
+Run `scripts/benchmark_phase45.py` with a new output directory. It compares
+graph diagnostics enabled/disabled on identical ambiguous candidate graphs,
+then compares the local append-only revision bridge with direct full
+recomputation over the same late-evidence and health sequence. Five samples are
+required for each workload and any finding mismatch exits nonzero. The captured
+run found graph diagnostics slower at both measured sizes while authoritative
+findings remained equal. The bridge median was 8.6900 ms versus 0.5834 ms for
+direct full recomputation, so it is not described as a true incremental speedup.
 
 ## Existing AWS evidence (do not rerun here)
 
@@ -146,3 +160,6 @@ or independently verify the evidence path.
   corpus; its perfect observed score does not supersede the frozen baseline.
 - Dense ambiguity is intentionally retained as uncertainty; candidate indexing
   never changes the authoritative `matches()` predicate or IBER decision rules.
+- The benchmark and demonstration results remain synthetic. Independently
+  verified collection, full source-health coverage, live latency, and
+  version-pinned AWS archive verification are partial or deferred.

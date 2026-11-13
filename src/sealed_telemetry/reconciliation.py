@@ -6,6 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any
 
+from sealed_telemetry.graph_matching import competing_graph_diagnostics
 from sealed_telemetry.schema import Evidence, timestamp
 
 
@@ -104,6 +105,7 @@ def reconcile(
     policy: Policy = DEFAULT_POLICY,
     *,
     candidate_mode: str = "indexed",
+    graph_diagnostics: bool = True,
 ) -> list[dict[str, Any]]:
     """One case per provider observation or unmatched trusted expectation.
 
@@ -113,6 +115,8 @@ def reconcile(
     """
     if candidate_mode not in {"indexed", "exhaustive"}:
         raise ValueError("candidate mode must be indexed or exhaustive")
+    if not isinstance(graph_diagnostics, bool):
+        raise ValueError("graph diagnostics flag must be boolean")
     expected = [e for e in events if e.event_type == "EXPECTED_ACTION"]
     observed = [e for e in events if e.event_type == "PROVIDER_ACTION"]
     intents = [e for e in events if e.event_type == "INTENT_CREATED"]
@@ -138,6 +142,25 @@ def reconcile(
             for exp in candidates[obs.event_id]
             if exp.event_id not in exact_owners or obs.event_id in exact_owners[exp.event_id]
         ]
+    candidate_ids = {
+        observation_id: [event.event_id for event in group]
+        for observation_id, group in candidates.items()
+    }
+    seen_expectations: set[str] = set()
+    competing = False
+    for candidate_id_group in candidate_ids.values():
+        if len(candidate_id_group) > 1 or any(
+            event_id in seen_expectations for event_id in candidate_id_group
+        ):
+            competing = True
+            break
+        seen_expectations.update(candidate_id_group)
+    if competing and graph_diagnostics:
+        # This bounded Hopcroft--Karp pass is diagnostic-only.  Its edges were
+        # already admitted by the selected candidate generator and `matches()`.
+        # It neither assigns an observation nor promotes a credential/action
+        # relation into proof of application execution; decisions stay intact.
+        competing_graph_diagnostics(candidate_ids)
     uses = {e.event_id: 0 for e in expected}
     for group in candidates.values():
         for expectation in group:

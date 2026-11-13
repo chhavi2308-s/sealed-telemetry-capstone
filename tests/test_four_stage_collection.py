@@ -284,7 +284,8 @@ def test_successful_exports_exclude_private_credential_material(collection, capl
         ("fingerprint_key_version", "v2"),
         ("credential_fingerprint", "d" * 64),
         ("actor_pseudonym", "e" * 64),
-        ("issuance_id", str(uuid4())),
+        # Fixed UUIDv4 preserves the schema-valid mismatch path and stable node IDs.
+        ("issuance_id", "00000000-0000-4000-8000-000000000001"),
     ],
 )
 def test_provider_binding_must_agree_with_independently_collected_issuer(collection, field, value):

@@ -60,3 +60,22 @@ decision construction, health/deadline work and allocation remain outside the
 provider-candidate lookup. The remaining application-intent loop is a
 meaningful possible future bottleneck at large `K`, but measurements do not
 justify a second index before a separate correctness/security review.
+
+## Phase 4/5 paired diagnostic and revision measurements
+
+The standalone `scripts/benchmark_phase45.py` harness uses identical seeded
+inputs, five samples per workload, `tracemalloc` peaks, and a nonzero exit on
+authoritative-finding mismatch. Its fresh captured output is intentionally
+outside version control under
+`verification/phase4-release-artifacts-20261113/phase45-paired-benchmark`.
+
+| comparison | workload | median A ms | median B ms | finding equality |
+|---|---|---:|---:|---|
+| graph diagnostics enabled/disabled | 100 expected / 25 provider | 29.7464 / 22.6334 | enabled slower | equal |
+| graph diagnostics enabled/disabled | 250 expected / 62 provider | 174.6231 / 138.4812 | enabled slower | equal |
+| revision bridge/direct full recomputation | late evidence + health sequence | 8.6900 / 0.5834 | bridge slower | equal where promised |
+
+The graph calculation is bounded and diagnostic-only; its cost does not buy an
+authoritative assignment. The revision bridge deliberately recomputes a full
+run and persists append-only history, so it is not a true event-driven
+incremental optimization. These are local Python timings, not AWS claims.

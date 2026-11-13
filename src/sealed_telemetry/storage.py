@@ -3,10 +3,13 @@
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from sealed_telemetry.schema import Evidence, canonical, digest, utcnow
+
+if TYPE_CHECKING:
+    from sealed_telemetry.reconciliation import Policy
 
 
 class Ledger:
@@ -100,6 +103,32 @@ class Ledger:
                 (decision["case_id"], len(old) + 1, canonical(result).decode()),
             )
         return result
+
+    def reconcile_run(
+        self,
+        run_id: str,
+        now: str,
+        *,
+        policy: "Policy | None" = None,
+        candidate_mode: str = "indexed",
+    ) -> list[dict[str, Any]]:
+        """Recompute one durable run and append only material decision revisions.
+
+        This is a local, bounded reconciliation bridge for late evidence and
+        source-health changes. It deliberately reuses the complete authoritative
+        engine instead of incrementally assigning candidate edges, so a late event
+        cannot turn graph output into proof of application execution.
+        """
+        from sealed_telemetry.reconciliation import DEFAULT_POLICY, reconcile
+
+        decisions = reconcile(
+            self.events(run_id),
+            now,
+            self.health(now),
+            policy or DEFAULT_POLICY,
+            candidate_mode=candidate_mode,
+        )
+        return [self.append_decision(decision) for decision in decisions]
 
     def history(self, case_id: str) -> list[dict[str, Any]]:
         return [

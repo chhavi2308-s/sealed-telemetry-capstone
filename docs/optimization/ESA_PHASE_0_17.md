@@ -31,8 +31,8 @@ already reconsider late evidence and health changes.
 | 1 | Focused code/trust-boundary audit above. | PASS | Live AWS evidence remains outside this audit. |
 | 2 | `ExpectedActionIndex` design and complexity in `BENCHMARK.md`. | PASS | None. |
 | 3 | Indexed + exhaustive modes; randomized, boundary, conflict, retry, delayed-evidence and decision-equivalence tests. | PASS | None. |
-| 4 | Existing conservative ambiguity behavior inspected; no Hopcroft–Karp change. | DEFERRED | Only revisit for a demonstrated correctness need. |
-| 5 | Existing ledger sweeps/revisions inspected; no new incremental pipeline. | DEFERRED | AWS-triggered incremental design needs separate approval. |
+| 4 | `graph_matching.py` supplies bounded deterministic Hopcroft–Karp diagnostics only for competing components. It cannot create an edge, assign evidence, or alter the five finding states. | PASS (local) | Diagnostics are intentionally non-authoritative. |
+| 5 | `Ledger.reconcile_run()` provides an append-only local late-evidence/source-health revision bridge with idempotent re-runs. | PARTIAL | It recomputes the full run; event-driven incremental reconciliation needs separate design/authorization. |
 | 6 | Five actual local `lab.run_scenario` runs plus a deterministic real-engine corroborated-abuse rule demo; all compare indexed/exhaustive decisions. | PASS (local) | Not independent/live verification. |
 | 7 | Actual scenario-disjoint study: 40 calibration, 180 test runs in `benchmarks/esa-evaluation/`. IBER TP45/FP0/FN15/TN120. | PASS | Synthetic only. |
 | 8 | The frozen 180-run holdout and calibration cover the original seeded cases; separate `esa-expanded-unrelated-leases-v1` adds 30 unmatched-provider cases with two unrelated valid leases and 30 benign multi-lease controls. | PASS | Synthetic evidence only; not an external corpus. |
@@ -42,7 +42,7 @@ already reconsider late evidence and health changes.
 | 12 | Evaluation records cloud latency, containment latency, overhead and AWS cost as null. | DEFERRED | Approved live timing measurement. |
 | 13 | Prior project evidence recorded: C2 live smoke passed; C4 UPDATE_COMPLETE/84 deployment checks; bounded C4 smoke recorded HTTP 200 and C2/C4 linkage. | PASS (bounded) | Collector/monitor, independent verification and health completeness remain unverified. |
 | 14 | Actual local replay-suppression forensic export plus in-memory tamper detection in `benchmarks/esa-forensic-redacted/`. | PASS (local) | Version-pinned S3 archive export requires approved read-only AWS access. |
-| 15 | Full offline suite, lint, format, strict mypy, whitespace and local cfn-lint validation of all five unchanged templates. | PASS | CloudFormation Guard remains explicitly deferred; no template was changed. |
+| 15 | Certified manifest run `20261113-212031`: 397/397 passed; lint, format, strict mypy, whitespace and local cfn-lint validation of all five unchanged templates. | PASS | CloudFormation Guard remains explicitly deferred; no template was changed. |
 | 16 | Acceptance criteria supported by local artifacts and full tests; AWS/live criteria qualified above. | PARTIAL | C4 live acceptance and cloud latency are blocked by authorization. |
 | 17 | This document, `BENCHMARK.md`, `ESA_DEMO_RUNBOOK.md`, raw benchmark/demo/evaluation/forensic outputs and scripts are the ESA package. | PASS | Commit/push only with approval. |
 
@@ -106,9 +106,11 @@ $env:PYTHONPATH='src'
 git diff --check
 ```
 
-Validation run: full pytest `385 passed` in complete non-overlapping batches;
-strict mypy over 36 source files passed. Ruff, format and `git diff --check`
-passed. The already-installed cfn-lint Python API reported 0 findings over
+Validation run `20261113-212031`: full pytest `397 passed` in complete
+non-overlapping manifest batches, with 397 collected/attempted and zero
+failures, errors, skips, xfails, or interruptions. Its source snapshot
+fingerprint is `90F867EEAC45C5707B52DE55DF99500CC46024DC16C55567FDCA06F093FFE62D`.
+Strict mypy, Ruff, format and `git diff --check` passed. The already-installed cfn-lint Python API reported 0 findings over
 `infra/budget.yaml`, `infra/four-stage.yaml`,
 `infra/security.yaml`, `infra/template.yaml` and `infra/workload.yaml` for
 `ap-south-1`. The SAM CLI was unavailable, so no SAM-specific validation ran.

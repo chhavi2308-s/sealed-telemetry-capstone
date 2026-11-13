@@ -160,8 +160,8 @@ def test_missing_or_delayed_records_are_retained_and_reconciled_on_later_batch(c
 @pytest.mark.parametrize(
     "kind,field,value",
     [
-        ("application_intent", "app_invocation_id", str(uuid4())),
-        ("application_intent", "run_id", str(uuid4())),
+        ("application_intent", "app_invocation_id", "00000000-0000-4000-8000-000000000002"),
+        ("application_intent", "run_id", "00000000-0000-4000-8000-000000000003"),
         ("application_intent", "authorization_hash", "f" * 64),
         ("application_credential_observation", "credential_fingerprint", "e" * 64),
         ("application_credential_observation", "fingerprint_key_version", "v99"),
